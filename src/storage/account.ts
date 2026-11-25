@@ -42,3 +42,31 @@ export async function deviceId(): Promise<string> {
   await browser.storage.local.set({ [DEVICE_KEY]: id });
   return id;
 }
+
+const REMEMBER_KEY = 'twoFactorRemember';
+
+/**
+ * "Remember me" tokens for two-step login, by server and email, as the official clients keep
+ * them. A token only skips the second step; it still needs the master password.
+ */
+export const rememberedTwoFactor = {
+  async get(serverUrl: string, email: string): Promise<string | null> {
+    const all = await readRemembered();
+    return all[rememberKey(serverUrl, email)] ?? null;
+  },
+  async set(serverUrl: string, email: string, token: string | null): Promise<void> {
+    const key = rememberKey(serverUrl, email);
+    const all = Object.entries(await readRemembered()).filter(([k]) => k !== key);
+    if (token) all.push([key, token]);
+    await browser.storage.local.set({ [REMEMBER_KEY]: Object.fromEntries(all) });
+  },
+};
+
+function rememberKey(serverUrl: string, email: string): string {
+  return `${serverUrl}|${email.trim().toLowerCase()}`;
+}
+
+async function readRemembered(): Promise<Record<string, string>> {
+  const stored = (await browser.storage.local.get(REMEMBER_KEY))[REMEMBER_KEY];
+  return typeof stored === 'object' && stored !== null ? (stored as Record<string, string>) : {};
+}

@@ -1,24 +1,50 @@
-import { useEffect, useState } from 'preact/hooks';
-import type { VaultStatus } from '../../shared/messages';
+import { Fragment } from 'preact';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { sendMessage } from '../../shared/messaging';
-import type { CipherSummary } from '../../vault/types';
+import { displayHost } from '../../vault/uri';
+import { CipherType, type SearchHit } from '../../vault/types';
+import { copyField, fillItem } from '../actions';
+import { usePopup } from '../context';
+import { hasMod, iconUrl, modLabel } from '../lib';
+import { ItemIcon } from './Dialogs';
 
 interface Props {
-  status: VaultStatus;
-  onStatus: (status: VaultStatus) => void;
+  onOpen: (id: string) => void;
+  onSettings: () => void;
+  /** Keeps the query when coming back from an item. */
+  query: string;
+  onQuery: (query: string) => void;
 }
 
-/** Read-only search (Phase 0). Arrow keys, Enter to fill, and copy chords come in Phase 1. */
-export function QuickFind({ status, onStatus }: Props) {
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState<CipherSummary[]>([]);
-  const [syncError, setSyncError] = useState<string | null>(null);
+const TYPE_LABEL: Record<CipherType, string> = {
+  [CipherType.Login]: 'Login',
+  [CipherType.SecureNote]: 'Note',
+  [CipherType.Card]: 'Card',
+  [CipherType.Identity]: 'Identity',
+  [CipherType.SshKey]: 'SSH key',
+};
+
+/**
+ * Quick find. Type to search; items saved for the current site come first.
+ * Up and Down move, Enter fills (or opens items that can't be filled), Shift+Enter or Right
+ * opens the item, and Mod+C, Mod+Shift+C, Mod+Alt+C copy the username, password, and
+ * one-time password.
+ */
+export function QuickFind({ onOpen, onSettings, query, onQuery }: Props) {
+  const ctx = usePopup();
+  const { status, tab, settings } = ctx;
+  const [results, setResults] = useState<SearchHit[]>([]);
+  const [selected, setSelected] = useState(0);
+  const listRef = useRef<HTMLUListElement>(null);
 
   useEffect(() => {
     let cancelled = false;
-    sendMessage('vault:search', { query }).then(
+    const request = tab?.url ? { query, url: tab.url } : { query };
+    sendMessage('vault:search', request).then(
       (items) => {
-        if (!cancelled) setResults(items);
+        if (cancelled) return;
+        setResults(items);
+        setSelected(0);
       },
       () => {
         if (!cancelled) setResults([]);
@@ -28,61 +54,186 @@ export function QuickFind({ status, onStatus }: Props) {
       cancelled = true;
     };
     // Re-run when a sync changes the vault, not only when the query changes.
-  }, [query, status.lastSync, status.itemCount]);
+  }, [query, tab?.url, status.lastSync, status.itemCount]);
 
-  function sync() {
-    setSyncError(null);
-    sendMessage('vault:sync').then(onStatus, (e: unknown) => {
-      setSyncError(e instanceof Error ? e.message : 'Sync failed');
-    });
+  useEffect(() => {
+    listRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
+  }, [selected]);
+
+  const current = results[selected];
+
+  function primary(item: SearchHit) {
+    if (item.type === CipherType.Login && tab?.url) void fillItem(ctx, item.id);
+    else onOpen(item.id);
   }
 
+  function onKeyDown(e: KeyboardEvent) {
+    const input = e.currentTarget as HTMLInputElement;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setSelected((i) => Math.min(i + 1, results.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSelected((i) => Math.max(i - 1, 0));
+    } else if (e.key === 'Enter' && current) {
+      e.preventDefault();
+      if (e.shiftKey) onOpen(current.id);
+      else primary(current);
+    } else if (
+      e.key === 'ArrowRight' &&
+      current &&
+      input.selectionStart === input.value.length &&
+      input.selectionEnd === input.value.length
+    ) {
+      e.preventDefault();
+      onOpen(current.id);
+    } else if (e.code === 'KeyC' && hasMod(e) && current) {
+      // Plain Mod+C still copies selected search text.
+      const hasSelection = input.selectionStart !== input.selectionEnd;
+      if (!e.shiftKey && !e.altKey && hasSelection) return;
+      e.preventDefault();
+      void copyField(ctx, current, e.altKey ? 'totp' : e.shiftKey ? 'password' : 'username');
+    } else if (e.key === 'Escape' && query !== '') {
+      e.preventDefault();
+      onQuery('');
+    }
+  }
+
+  const siteCount = results.filter((r) => r.siteMatch).length;
+  const host = tab?.url ? safeHost(tab.url) : null;
+  const mod = modLabel();
+
   return (
-    <main class="screen">
-      <header class="row">
+    <main class="screen quick">
+      <header class="row search-bar">
         <input
           type="search"
           class="grow"
           placeholder="Search vault"
           aria-label="Search vault"
+          aria-controls="results"
+          aria-activedescendant={current ? `item-${current.id}` : undefined}
           value={query}
           onInput={(e) => {
-            setQuery(e.currentTarget.value);
+            onQuery(e.currentTarget.value);
           }}
+          onKeyDown={onKeyDown}
           autoFocus
         />
         <button
           type="button"
+          class="ghost"
+          aria-label="Settings"
+          title="Settings"
+          onClick={onSettings}
+        >
+          ⚙
+        </button>
+        <button
+          type="button"
+          class="ghost"
+          title="Lock"
           onClick={() => {
-            void sendMessage('vault:lock').then(onStatus);
+            void sendMessage('vault:lock').then(ctx.onStatus);
           }}
         >
           Lock
         </button>
       </header>
-      <ul class="results" role="listbox" aria-label="Results">
-        {results.map((item) => (
-          <li key={item.id} role="option" aria-selected="false">
-            <span class="name">{item.name}</span>
-            {item.subtitle && <span class="muted">{item.subtitle}</span>}
-          </li>
-        ))}
-      </ul>
-      {results.length === 0 && <p class="muted">No items</p>}
-      {syncError && (
-        <p role="alert" class="error">
-          {syncError}
+      {status.syncError && (
+        <p role="alert" class="banner error">
+          Sync failed: {status.syncError}
         </p>
       )}
+      <ul class="results" id="results" role="listbox" aria-label="Results" ref={listRef}>
+        {results.map((item, index) => {
+          const header =
+            index === 0 && item.siteMatch
+              ? `Suggested for ${host ?? 'this site'}`
+              : index === siteCount && siteCount > 0
+                ? 'All items'
+                : null;
+          const itemHost = displayHost(item.uris);
+          return (
+            <Fragment key={item.id}>
+              {header && (
+                <li class="group" role="presentation">
+                  {header}
+                </li>
+              )}
+              <li
+                id={`item-${item.id}`}
+                role="option"
+                aria-selected={index === selected}
+                class={index === selected ? 'selected' : undefined}
+                onMouseMove={() => {
+                  if (index !== selected) setSelected(index);
+                }}
+                onClick={() => {
+                  onOpen(item.id);
+                }}
+              >
+                <ItemIcon
+                  name={item.name}
+                  src={settings?.showIcons ? iconUrl(status.serverUrl, itemHost) : null}
+                />
+                <span class="text">
+                  <span class="name">
+                    {item.name}
+                    {item.favorite && (
+                      <span class="star" aria-label="Favorite">
+                        {' '}
+                        ★
+                      </span>
+                    )}
+                  </span>
+                  <span class="muted">{item.subtitle ?? itemHost ?? TYPE_LABEL[item.type]}</span>
+                </span>
+                {item.type === CipherType.Login && tab?.url && index === selected && (
+                  <button
+                    type="button"
+                    class="fill"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void fillItem(ctx, item.id);
+                    }}
+                  >
+                    Fill
+                  </button>
+                )}
+              </li>
+            </Fragment>
+          );
+        })}
+      </ul>
+      {results.length === 0 && (
+        <p class="empty muted">{query ? `No items match “${query}”` : 'Your vault is empty'}</p>
+      )}
       <footer class="row footer muted">
-        <span class="grow">
-          {status.itemCount} {status.itemCount === 1 ? 'item' : 'items'}
-          {status.lastSync && ` · synced ${new Date(status.lastSync).toLocaleTimeString()}`}
+        <span class="grow hints">
+          ↵ fill · ⇧↵ open · {mod}C user · {mod}⇧C password
         </span>
-        <button type="button" class="link" onClick={sync}>
+        <button
+          type="button"
+          class="link"
+          title={status.lastSync ? `Synced ${new Date(status.lastSync).toLocaleString()}` : 'Sync'}
+          onClick={() => {
+            sendMessage('vault:sync').then(ctx.onStatus, (e: unknown) => {
+              ctx.toast(e instanceof Error ? e.message : 'Sync failed');
+            });
+          }}
+        >
           Sync
         </button>
       </footer>
     </main>
   );
+}
+
+function safeHost(url: string): string | null {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return null;
+  }
 }

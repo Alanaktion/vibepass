@@ -6,7 +6,8 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import tseslint from 'typescript-eslint';
 
 export default defineConfig(
-  { ignores: ['dist/', 'coverage/', 'node_modules/'] },
+  // live-check.mjs drives Playwright, which isn't a project dependency.
+  { ignores: ['dist/', 'coverage/', 'node_modules/', 'scripts/dev/live-check.mjs'] },
   js.configs.recommended,
   tseslint.configs.strictTypeChecked,
   {
@@ -37,6 +38,19 @@ export default defineConfig(
   {
     files: ['scripts/**/*.mjs', '*.config.{js,ts}'],
     languageOptions: { globals: globals.node },
+  },
+  {
+    // Dev scripts talk to a local server's JSON API; typing every response isn't worth it.
+    files: ['scripts/dev/**/*.mjs'],
+    rules: {
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/restrict-template-expressions': 'off',
+    },
   },
   {
     files: ['tests/**/*.{ts,tsx}'],

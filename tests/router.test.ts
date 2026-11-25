@@ -4,6 +4,7 @@ import { createRouter } from '../src/background/router';
 import { KdfType } from '../src/crypto';
 import { createSearchIndex } from '../src/search';
 import { createMessage } from '../src/shared/messages';
+import { emptyVault } from '../src/vault/decrypt';
 import { VaultState } from '../src/vault/state';
 import { CipherType } from '../src/vault/types';
 import { createTestService } from './helpers';
@@ -15,7 +16,11 @@ function setup() {
   const vault = new VaultState();
   const search = createSearchIndex();
   const { service, deps } = createTestService(vault, search);
-  const route = createRouter(createHandlers({ vault, search, service }), EXT_ID);
+  const route = createRouter(
+    createHandlers({ vault, search, service }),
+    EXT_ID,
+    'chrome-extension://test-extension-id/',
+  );
   return { vault, search, route, deps };
 }
 
@@ -34,11 +39,45 @@ describe('background router', () => {
     });
   });
 
+  it('refuses vault messages from content scripts', async () => {
+    const { route } = setup();
+    const contentScript = {
+      id: EXT_ID,
+      url: 'https://evil.test/',
+      tab: { id: 3, index: 0, highlighted: false, active: true, pinned: false, incognito: false },
+    };
+    await expect(
+      route(createMessage('vault:search', { query: '' }), contentScript),
+    ).resolves.toEqual({ ok: false, error: 'Untrusted sender' });
+    await expect(
+      route(
+        createMessage('autofill:page-ready', { url: 'https://evil.test/', loginForms: 0 }),
+        contentScript,
+      ),
+    ).resolves.toEqual({ ok: true, data: undefined });
+  });
+
+  it('keeps error codes in the envelope', async () => {
+    const { route } = setup();
+    await expect(route(createMessage('vault:item', { id: 'x' }), sender)).resolves.toEqual({
+      ok: false,
+      error: 'Vibepass is locked',
+      code: 'locked',
+    });
+  });
+
   it('answers vault:status', async () => {
     const { route } = setup();
     await expect(route(createMessage('vault:status', undefined), sender)).resolves.toEqual({
       ok: true,
-      data: { state: 'logged-out', serverUrl: null, email: null, lastSync: null, itemCount: 0 },
+      data: {
+        state: 'logged-out',
+        serverUrl: null,
+        email: null,
+        lastSync: null,
+        itemCount: 0,
+        syncError: null,
+      },
     });
   });
 
@@ -55,9 +94,13 @@ describe('background router', () => {
       type: CipherType.Login,
       name: 'Example',
       subtitle: 'me@example.com',
-      uris: ['https://example.com'],
+      uris: [{ uri: 'https://example.com', match: null }],
       favorite: false,
       folderId: null,
+      organizationId: null,
+      collectionIds: [],
+      hasTotp: false,
+      reprompt: false,
     };
     search.replaceAll([item]);
 
@@ -75,10 +118,11 @@ describe('background router', () => {
       protectedUserKey: '2.x|y|z',
       refreshToken: null,
     });
-    vault.unlock(new Uint8Array(64), { items: [item], folders: [], skipped: 0 });
+    vault.unlock(new Uint8Array(64), { ...emptyVault(), items: [item] });
+    search.replaceAll([item]);
     await expect(route(createMessage('vault:search', { query: 'ex' }), sender)).resolves.toEqual({
       ok: true,
-      data: [item],
+      data: [{ ...item, siteMatch: false }],
     });
 
     const locked = await route(createMessage('vault:lock', undefined), sender);

@@ -12,12 +12,15 @@ export interface UnlockedSession {
   accessToken: string | null;
   /** Epoch milliseconds when the access token expires. */
   accessTokenExpiresAt: number;
+  /** The server's vault revision at the last sync, so polling can skip unchanged vaults. */
+  revision?: number | null;
 }
 
 interface StoredSession {
   userKey: string;
   accessToken: string | null;
   accessTokenExpiresAt: number;
+  revision?: number | null;
 }
 
 const KEY = 'unlocked';
@@ -28,6 +31,7 @@ export const sessionStore = {
       userKey: toBase64(session.userKey),
       accessToken: session.accessToken,
       accessTokenExpiresAt: session.accessTokenExpiresAt,
+      revision: session.revision ?? null,
     };
     await browser.storage.session.set({ [KEY]: stored });
   },

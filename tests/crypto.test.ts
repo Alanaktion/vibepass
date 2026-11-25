@@ -69,7 +69,7 @@ describe.each(Object.entries(officialVaults))('official web vault (%s)', (_name,
       expect(item, expected.name).toBeDefined();
       expect(item!.type).toBe(expected.type);
       expect(item!.subtitle).toBe(expected.username ?? null);
-      expect(item!.uris).toEqual(expected.uris ?? []);
+      expect(item!.uris.map((u) => u.uri)).toEqual(expected.uris ?? []);
     }
   });
 

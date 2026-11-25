@@ -23,11 +23,16 @@ vi.mock('webextension-polyfill', () => {
         id: 'test-extension-id',
         getURL: (path: string) => `chrome-extension://test-extension-id/${path}`,
         sendMessage: vi.fn(),
-        onMessage: { addListener: vi.fn() },
+        onMessage: { addListener: vi.fn(), removeListener: vi.fn() },
         onInstalled: { addListener: vi.fn() },
       },
       storage: { local: area(store), session: area(new Map<string, unknown>()) },
       permissions: { request: vi.fn(() => Promise.resolve(true)) },
+      tabs: {
+        query: vi.fn(() =>
+          Promise.resolve([{ id: 7, url: 'https://login.example.com/signin', active: true }]),
+        ),
+      },
       alarms: { onAlarm: { addListener: vi.fn() } },
       commands: { onCommand: { addListener: vi.fn() } },
     },

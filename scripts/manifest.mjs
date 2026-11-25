@@ -37,7 +37,9 @@ export function createManifest(browser, pkg) {
     },
     // Minimal permissions. The server origin is requested at runtime from optional_host_permissions
     // once the user enters their server URL.
-    permissions: ['storage', 'alarms', 'activeTab'],
+    // idle: auto-lock. clipboardWrite: clear copied secrets. scripting: inject the content script
+    // into a tab opened before install, only on a fill gesture (activeTab).
+    permissions: ['storage', 'alarms', 'activeTab', 'idle', 'clipboardWrite', 'scripting'],
     optional_host_permissions: ['https://*/*', 'http://*/*'],
     content_scripts: [
       {
@@ -52,6 +54,10 @@ export function createManifest(browser, pkg) {
         suggested_key: { default: 'Ctrl+Shift+Space', mac: 'Command+Shift+Space' },
         description: 'Open quick find',
       },
+      'fill-login': {
+        suggested_key: { default: 'Ctrl+Shift+L', mac: 'Command+Shift+L' },
+        description: 'Fill the best login for this page',
+      },
     },
     content_security_policy: {
       // 'wasm-unsafe-eval' is required for the Argon2id WASM build. No remote code is ever loaded.
@@ -60,6 +66,8 @@ export function createManifest(browser, pkg) {
   };
 
   if (browser === 'chrome') {
+    // Chrome workers have no DOM; an offscreen document clears the clipboard.
+    /** @type {string[]} */ (manifest.permissions).push('offscreen');
     manifest.background = { service_worker: 'background.js', type: 'module' };
     manifest.minimum_chrome_version = '116';
   } else {

@@ -4,7 +4,7 @@ How we get from the current scaffold to a public v1, phase by phase. This follow
 the project spec (Spike, MVP, Write support, Beta, v1, Later) and adds the concrete milestones and
 exit criteria for each phase, based on what is already in the repo.
 
-Last updated: 2026-11-25.
+Last updated: 2026-11-25 (Phase 1 built).
 
 ## Where we are
 
@@ -65,6 +65,8 @@ Vaultwarden, and show it in a read-only popup.
 > - Not yet verified: self-hosted Bitwarden (its image could not be pulled in the build
 >   environment), Firefox in a live browser, and two-step login (shows a clear error for now).
 >   These carry into Phase 1, along with running the local-server check in CI.
+> - Update: Alan confirmed the Firefox build against his production Vaultwarden, and two-step
+>   login shipped in Phase 1.
 
 ### Decisions to make first
 
@@ -118,6 +120,26 @@ implementation detail; the UI, search, autofill engine, and message protocol sta
 ## Phase 1: MVP
 
 **Goal:** a read-only extension good enough to replace the official one for daily logins.
+
+> **Status (2026-11-25): built; daily-use trial next.**
+>
+> - All eight milestones are in, with 105 unit tests (search, matching, TOTP vectors, detection,
+>   autofill, clipboard, auto-lock, two-step login, organizations, popup) and a live check
+>   (`scripts/dev/live-check.mjs`, seeded by `scripts/dev/seed-vault.mjs`) that passed 22 of 22
+>   against Vaultwarden 1.37.5 in Chromium: login and sync 0.86 s, unlock to filled form
+>   0.33 s, authenticator two-step login with "remember this browser", attachments,
+>   organization items, re-prompt, autofill, and clipboard clearing.
+> - Search benchmark: 5,000 items index in about 80 ms; the slowest query takes about 16 ms.
+> - Deferred, with reasons:
+>   - **Live updates via the notifications hub.** Sync polls the cheap revision-date endpoint
+>     every 5 minutes and when the popup opens, and only downloads the vault when it changed.
+>     The SignalR hub (MessagePack over WebSocket) inside an MV3 worker is its own project.
+>   - **WebAuthn and Duo two-step login.** Authenticator, email, and YubiKey OTP work; the
+>     others need a browser flow on the vault's origin. The popup says so plainly.
+>   - **Equivalent domains** (google.com and youtube.com as one login) are not applied yet.
+>   - **Corpus pass rate** (top 50 sites) needs the page corpus, which doesn't exist yet.
+> - Still open from Phase 0: a live check against self-hosted Bitwarden, Firefox for the new
+>   Phase 1 features, and running the live check in CI.
 
 ### Milestones
 

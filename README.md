@@ -4,9 +4,25 @@ A fast, keyboard-first browser extension for **self-hosted Bitwarden and Vaultwa
 It uses your existing server and vault, with a 1Password-style experience: quick find, inline
 autofill, and a calm item view. Nothing to migrate.
 
-> **Status: Phase 0 (read-only).** Vibepass can log in to a self-hosted server, sync, decrypt,
-> and search your vault, read-only. It never writes to the vault. Autofill, item details, and
-> two-step login come in Phase 1. Test it with a throwaway account first.
+> **Status: Phase 1 (read-only daily driver).** Quick find, item details, TOTP codes, autofill
+> for standard login forms, auto-lock, clipboard clearing, background sync, two-step login, and
+> read-only organization items. It never writes to the vault; saving and editing come in
+> Phase 2.
+
+## Using it
+
+- **Open:** Ctrl+Shift+Space (⌘⇧Space on macOS), or click the toolbar icon. Items saved for the
+  current site are listed first.
+- **In the list:** type to search (fuzzy, across names, usernames, websites, and notes). Up and
+  Down move, Enter fills the selected login into the page, Shift+Enter or Right opens it.
+  Ctrl+C copies the username, Ctrl+Shift+C the password, Ctrl+Alt+C the one-time password
+  (⌘ on macOS).
+- **Fill without the popup:** Ctrl+Shift+L (⌘⇧L) fills the best match for the page. If the
+  vault is locked or nothing matches, the popup opens instead.
+- Vibepass only fills on your gesture, only into the page's top frame, and only for items saved
+  for that site. It asks before filling anything else, or an https login into an http page.
+- Copied secrets are cleared from the clipboard after 30 seconds, and the vault locks after 15
+  minutes idle or when your computer locks. Both are in Settings (gear icon).
 
 ## Requirements
 
@@ -56,17 +72,22 @@ src/
     index.ts      Registers listeners (messages, alarms, commands)
     router.ts     Typed message dispatch; always replies with an { ok, data | error } envelope
     handlers.ts   One handler per message type
-  popup/        Preact UI: setup, unlock, and quick find in one surface
-  content/      Content script: form detection and (later) the inline autofill menu
+    autofill.ts   Fill on gesture: page check, URI match, then send to the tab's top frame
+    autolock.ts   Idle and system-lock auto-lock
+    clipboard.ts  Clears copied secrets after the timeout (offscreen document in Chrome)
+  popup/        Preact UI: setup (with two-step login), unlock, quick find, item view, settings
+  offscreen/    Chrome-only offscreen document that writes the clipboard for the worker
+  content/      Content script: login field detection and filling
   api/          Bitwarden server API client: prelogin, token login and refresh, sync
   crypto/       Thin wrapper over Bitwarden's SDK (WASM): KDF, user key, EncString
   storage/      Settings (storage.local), session key (storage.session), vault cache (IndexedDB)
-  search/       In-memory search index (substring placeholder; MiniSearch planned)
-  vault/        In-memory vault state and decrypted view models
+  search/       MiniSearch quick find, current site first
+  vault/        Vault state, decryption, URI matching (public suffix list), TOTP
   shared/       Message protocol, messaging helper, browser API wrapper, logger
 scripts/
   build.mjs     Runs one Vite build per entry, then writes manifest.json
   manifest.mjs  Generates the per-browser manifest
+  dev/          Local Vaultwarden helpers: register an account, seed a vault, live check
 tests/          Vitest tests
 ```
 
@@ -116,6 +137,19 @@ docker run -d --name vw -e SIGNUPS_ALLOWED=true -e I_REALLY_WANT_VOLATILE_STORAG
   -e ROCKET_TLS='{certs="/ssl/cert.pem",key="/ssl/key.pem"}' -p 8222:80 vaultwarden/server
 node scripts/dev/register-account.mjs https://localhost:8222 me@example.test 'a long test password' argon2id
 ```
+
+For a full live check of the built extension (needs Playwright, which isn't a project
+dependency), seed a known vault and run the checks. Plain http on 127.0.0.1 is fine for this:
+
+```sh
+node scripts/dev/register-account.mjs http://127.0.0.1:8000 live@example.test 'live test password'
+node scripts/dev/seed-vault.mjs http://127.0.0.1:8000 live@example.test 'live test password' \
+  http://127.0.0.1:8090/login            # add --two-factor on a second account to test 2FA
+npm run build:chrome
+node scripts/dev/live-check.mjs http://127.0.0.1:8000 live@example.test 'live test password'
+```
+
+Vaultwarden rate-limits logins (10 a minute by default), so wait a minute between repeated runs.
 
 The web vault needs HTTPS, so create a self-signed `ssl/cert.pem` and `ssl/key.pem` for
 `localhost` first, and run Node with `NODE_EXTRA_CA_CERTS=ssl/cert.pem`.

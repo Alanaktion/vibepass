@@ -1,10 +1,13 @@
 import { KdfType, type KdfConfig } from '../crypto/types';
-import type {
-  PasswordTokenRequest,
-  PreloginResponse,
-  ServerConfig,
-  SyncResponse,
-  TokenResponse,
+import type { ErrorCode } from '../shared/errors';
+import {
+  TwoFactorProvider,
+  type AttachmentResponse,
+  type PasswordTokenRequest,
+  type PreloginResponse,
+  type ServerConfig,
+  type SyncResponse,
+  type TokenResponse,
 } from './types';
 
 /** A request the server rejected, with the most useful message we could find in the body. */
@@ -18,14 +21,37 @@ export class ApiError extends Error {
   }
 }
 
-/** The account has two-step login turned on. The prompt for it arrives in Phase 1. */
+/** What the login screen needs to ask for a two-step login code. No secrets. */
+export interface TwoFactorDetails {
+  /** Providers the account has turned on, in the server's order. */
+  providers: TwoFactorProvider[];
+  /** Masked address the server will email a code to, for the email provider. */
+  emailHint: string | null;
+}
+
+/** The account has two-step login turned on; ask for a code and send the token request again. */
 export class TwoFactorRequiredError extends ApiError {
-  constructor(readonly providers: number[]) {
-    super(
-      'This account uses two-step login. Vibepass will support it soon; for now, use an account without it.',
-      400,
-    );
+  readonly code: ErrorCode = 'two-factor-required';
+  readonly details: TwoFactorDetails;
+
+  constructor(providers: TwoFactorProvider[], emailHint: string | null = null) {
+    super('Enter your two-step login code', 400);
     this.name = 'TwoFactorRequiredError';
+    this.details = { providers, emailHint };
+  }
+
+  get providers(): TwoFactorProvider[] {
+    return this.details.providers;
+  }
+}
+
+/** Bitwarden asks new devices (without two-step login) for a code it emails to the account. */
+export class NewDeviceVerificationError extends ApiError {
+  readonly code: ErrorCode = 'new-device-verification';
+
+  constructor() {
+    super('Enter the verification code Bitwarden emailed you', 400);
+    this.name = 'NewDeviceVerificationError';
   }
 }
 
@@ -78,7 +104,12 @@ export class ApiClient {
     };
   }
 
-  async login({ email, masterPasswordHash, device }: PasswordTokenRequest): Promise<TokenResponse> {
+  async login({
+    email,
+    masterPasswordHash,
+    device,
+    challenge,
+  }: PasswordTokenRequest): Promise<TokenResponse> {
     const form = new URLSearchParams({
       grant_type: 'password',
       username: email,
@@ -89,6 +120,12 @@ export class ApiClient {
       deviceIdentifier: device.identifier,
       deviceName: device.name,
     });
+    if (challenge?.twoFactor) {
+      form.set('twoFactorToken', challenge.twoFactor.token.replace(/\s+/g, ''));
+      form.set('twoFactorProvider', String(challenge.twoFactor.provider));
+      form.set('twoFactorRemember', challenge.twoFactor.remember ? '1' : '0');
+    }
+    if (challenge?.newDeviceOtp) form.set('newDeviceOtp', challenge.newDeviceOtp.trim());
     const token = await this.json<TokenResponse>(`${this.identityUrl}/connect/token`, {
       method: 'POST',
       headers: {
@@ -116,6 +153,56 @@ export class ApiClient {
     return token;
   }
 
+  /** Ask the server to email a two-step login code. Needs the login hash, like the token call. */
+  async sendEmailLoginCode(
+    email: string,
+    masterPasswordHash: string,
+    deviceIdentifier: string,
+  ): Promise<void> {
+    await this.request(`${this.apiUrl}/two-factor/send-email-login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, masterPasswordHash, deviceIdentifier }),
+    });
+  }
+
+  /** Ask Bitwarden to email a new device verification code again. */
+  async resendNewDeviceOtp(email: string, masterPasswordHash: string): Promise<void> {
+    await this.request(`${this.apiUrl}/accounts/resend-new-device-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, masterPasswordHash }),
+    });
+  }
+
+  /** When the account's vault last changed, in epoch ms. Cheap, so background sync polls it. */
+  async revisionDate(): Promise<number> {
+    const body = await this.json<unknown>(`${this.apiUrl}/accounts/revision-date`, {
+      headers: this.authHeaders(),
+    });
+    const value = typeof body === 'number' ? body : Date.parse(String(body));
+    if (!Number.isFinite(value)) throw new ApiError('The server sent an unreadable revision', 200);
+    return value;
+  }
+
+  /** Download metadata for an attachment, including a short-lived URL for the encrypted file. */
+  async attachment(cipherId: string, attachmentId: string): Promise<AttachmentResponse> {
+    return await this.json<AttachmentResponse>(
+      `${this.apiUrl}/ciphers/${encodeURIComponent(cipherId)}/attachment/${encodeURIComponent(attachmentId)}`,
+      { headers: this.authHeaders() },
+    );
+  }
+
+  /** Fetch an encrypted attachment. Only from the server's own origin, without our token. */
+  async download(url: string): Promise<Uint8Array> {
+    const target = new URL(url, this.baseUrl);
+    if (target.origin !== new URL(this.baseUrl).origin) {
+      throw new ApiError('Attachments stored outside your server are not supported yet', 0);
+    }
+    const response = await this.request(target.href, {});
+    return new Uint8Array(await response.arrayBuffer());
+  }
+
   async sync(): Promise<SyncResponse> {
     return await this.json<SyncResponse>(`${this.apiUrl}/sync?excludeDomains=true`, {
       headers: this.authHeaders(),
@@ -125,6 +212,30 @@ export class ApiClient {
   private authHeaders(): Record<string, string> {
     if (!this.accessToken) throw new ApiError('Not logged in', 401);
     return { Authorization: `Bearer ${this.accessToken}` };
+  }
+
+  private async request(url: string, init: RequestInit): Promise<Response> {
+    let response: Response;
+    try {
+      response = await this.fetch(url, {
+        ...init,
+        credentials: 'omit',
+        cache: 'no-store',
+      });
+    } catch {
+      throw new ApiError(`Could not reach ${this.baseUrl}`, 0);
+    }
+    if (!response.ok) {
+      const text = await response.text();
+      let body: unknown = null;
+      try {
+        body = text ? JSON.parse(text) : null;
+      } catch {
+        // Fall through to the status-based message.
+      }
+      throw errorFrom(response.status, body);
+    }
+    return response;
   }
 
   private async json<T>(url: string, init: RequestInit): Promise<T> {
@@ -170,8 +281,8 @@ export function kdfFromWire(
 
 function errorFrom(status: number, body: unknown): ApiError {
   const data = (typeof body === 'object' && body !== null ? body : {}) as Record<string, unknown>;
-  if (Array.isArray(data.TwoFactorProviders)) {
-    return new TwoFactorRequiredError((data.TwoFactorProviders as unknown[]).map(Number));
+  if (Array.isArray(data.TwoFactorProviders) || isObject(data.TwoFactorProviders2)) {
+    return twoFactorError(data);
   }
   const model = (data.ErrorModel ?? data.errorModel) as
     { Message?: unknown; message?: unknown } | undefined;
@@ -183,6 +294,9 @@ function errorFrom(status: number, body: unknown): ApiError {
     data.error_description,
   ];
   const message = candidates.find((c): c is string => typeof c === 'string' && c !== '');
+  if (data.error === 'device_error' || /new device verification required/i.test(message ?? '')) {
+    return new NewDeviceVerificationError();
+  }
   if (
     data.error_description === 'invalid_username_or_password' ||
     (data.error === 'invalid_grant' && !message)
@@ -191,6 +305,24 @@ function errorFrom(status: number, body: unknown): ApiError {
   }
   if (status === 401) return new ApiError('Your session expired. Log in again.', status);
   return new ApiError(message ?? `Server error (${String(status)})`, status);
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** Servers send the provider list as an array, a keyed object with parameters, or both. */
+function twoFactorError(data: Record<string, unknown>): TwoFactorRequiredError {
+  const params = isObject(data.TwoFactorProviders2) ? data.TwoFactorProviders2 : {};
+  const ids = Array.isArray(data.TwoFactorProviders)
+    ? (data.TwoFactorProviders as unknown[]).map(Number)
+    : Object.keys(params).map(Number);
+  const providers = [...new Set(ids)].filter(
+    (id): id is TwoFactorProvider => Number.isInteger(id) && id in TwoFactorProvider,
+  );
+  const email = params[String(TwoFactorProvider.Email)];
+  const hint = isObject(email) && typeof email.Email === 'string' ? email.Email : null;
+  return new TwoFactorRequiredError(providers, hint);
 }
 
 /** Trim whitespace and trailing slashes, and require http(s). */

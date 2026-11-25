@@ -19,6 +19,16 @@ describe('manifest', () => {
   it('requests no broad host permissions up front', () => {
     const manifest = createManifest('chrome', { version: '0.0.1' });
     expect(manifest.host_permissions).toBeUndefined();
-    expect(manifest.permissions).toEqual(['storage', 'alarms', 'activeTab']);
+    expect(manifest.permissions).toEqual([
+      'storage',
+      'alarms',
+      'activeTab',
+      'idle',
+      'clipboardWrite',
+      'scripting',
+      'offscreen',
+    ]);
+    expect(createManifest('firefox', { version: '0.0.1' }).permissions).not.toContain('offscreen');
+    expect(manifest.commands).toHaveProperty('fill-login');
   });
 });

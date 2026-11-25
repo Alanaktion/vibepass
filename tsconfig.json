@@ -16,9 +16,11 @@
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "noEmit": true,
+    "allowImportingTsExtensions": true,
     "allowJs": true,
     "checkJs": true,
     "types": ["node", "vitest/globals"]
   },
-  "include": ["src", "tests", "scripts", "vite.config.ts", "eslint.config.js"]
+  "include": ["src", "tests", "scripts", "vite.config.ts", "eslint.config.js"],
+  "exclude": ["scripts/dev/live-check.mjs"]
 }

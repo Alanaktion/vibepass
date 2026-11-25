@@ -4,7 +4,7 @@
  * the server's casing, which differs between endpoints (identity responses are PascalCase).
  */
 import type { KdfType } from '../crypto/types';
-import type { CipherType } from '../vault/types';
+import type { CipherType, FieldType, UriMatch } from '../vault/types';
 
 /** POST /identity/accounts/prelogin */
 export interface PreloginResponse {
@@ -30,6 +30,7 @@ export interface PasswordTokenRequest {
   /** Base64 master password hash, never the password itself. */
   masterPasswordHash: string;
   device: DeviceInfo;
+  challenge?: LoginChallenge;
 }
 
 export interface MasterPasswordUnlockData {
@@ -52,6 +53,27 @@ export interface TokenResponse {
   KdfMemory?: number | null;
   KdfParallelism?: number | null;
   UserDecryptionOptions?: { MasterPasswordUnlock?: MasterPasswordUnlockData | null } | null;
+  /** "Remember me" token for two-step login, when the request asked for one. */
+  TwoFactorToken?: string | null;
+}
+
+/** Bitwarden two-step login providers (TwoFactorProviderType). */
+export enum TwoFactorProvider {
+  Authenticator = 0,
+  Email = 1,
+  Duo = 2,
+  YubiKey = 3,
+  U2f = 4,
+  Remember = 5,
+  OrganizationDuo = 6,
+  WebAuthn = 7,
+  RecoveryCode = 8,
+}
+
+/** A second step for the token request: a two-step login code or a new-device code. */
+export interface LoginChallenge {
+  twoFactor?: { provider: TwoFactorProvider; token: string; remember: boolean };
+  newDeviceOtp?: string;
 }
 
 /** Encrypted cipher as returned by /api/sync and /api/ciphers. String fields are EncStrings. */
@@ -67,13 +89,84 @@ export interface CipherResponse {
   favorite: boolean;
   revisionDate: string;
   deletedDate: string | null;
+  /** 1 = ask for the master password again before showing or filling secrets. */
+  reprompt?: number;
+  /** False when an organization hides passwords from this user (fill still works). */
+  viewPassword?: boolean;
+  edit?: boolean;
+  collectionIds?: string[] | null;
   login?: {
     username: string | null;
     password: string | null;
     totp: string | null;
-    uris: { uri: string | null; match: number | null }[] | null;
+    uris: { uri: string | null; match: UriMatch | null }[] | null;
   } | null;
-  card?: { brand: string | null; number: string | null } | null;
+  card?: {
+    cardholderName?: string | null;
+    brand: string | null;
+    number: string | null;
+    expMonth?: string | null;
+    expYear?: string | null;
+    code?: string | null;
+  } | null;
+  identity?: Partial<Record<IdentityField, string | null>> | null;
+  sshKey?: {
+    privateKey: string | null;
+    publicKey: string | null;
+    keyFingerprint: string | null;
+  } | null;
+  fields?:
+    | { name: string | null; value: string | null; type: FieldType; linkedId?: number | null }[]
+    | null;
+  attachments?: AttachmentResponse[] | null;
+}
+
+export type IdentityField =
+  | 'title'
+  | 'firstName'
+  | 'middleName'
+  | 'lastName'
+  | 'address1'
+  | 'address2'
+  | 'address3'
+  | 'city'
+  | 'state'
+  | 'postalCode'
+  | 'country'
+  | 'company'
+  | 'email'
+  | 'phone'
+  | 'ssn'
+  | 'username'
+  | 'passportNumber'
+  | 'licenseNumber';
+
+export interface AttachmentResponse {
+  id: string;
+  /** EncString, encrypted with the cipher key. */
+  fileName: string | null;
+  /** Attachment key wrapped with the cipher key; null on very old attachments. */
+  key: string | null;
+  size: string | number | null;
+  sizeName: string | null;
+  url?: string | null;
+}
+
+export interface CollectionResponse {
+  id: string;
+  organizationId: string;
+  /** EncString, encrypted with the organization key. */
+  name: string;
+  readOnly?: boolean;
+  hidePasswords?: boolean;
+}
+
+export interface OrganizationResponse {
+  id: string;
+  name: string;
+  /** Organization key, RSA-encrypted to the account's public key. */
+  key: string;
+  enabled?: boolean;
 }
 
 export interface FolderResponse {
@@ -89,9 +182,14 @@ export interface SyncResponse {
     email: string;
     key: string;
     privateKey: string | null;
-    organizations?: { id: string; key: string }[];
+    /** Newer servers also nest the wrapped private key here. */
+    accountKeys?: {
+      publicKeyEncryptionKeyPair?: { wrappedPrivateKey?: string | null } | null;
+    } | null;
+    organizations?: OrganizationResponse[];
   };
   folders: FolderResponse[];
+  collections?: CollectionResponse[] | null;
   ciphers: CipherResponse[];
   userDecryption?: {
     masterPasswordUnlock?: {

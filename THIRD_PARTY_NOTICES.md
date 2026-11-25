@@ -16,3 +16,9 @@ Bitwarden Inc.
 
 - Licenses: MIT, MPL-2.0
 - Bundled in the popup, background, and content scripts.
+
+## MiniSearch, tldts
+
+- Licenses: MIT, MIT
+- Bundled in the background worker: MiniSearch for quick find, tldts (with the Public Suffix
+  List, MPL-2.0 data) for registrable-domain matching.

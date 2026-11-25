@@ -61,7 +61,12 @@ await Promise.all([
     publicDir: `${root}public`,
     build: {
       ...shared.build,
-      rolldownOptions: { input: { popup: `${root}src/popup/index.html` } },
+      rolldownOptions: {
+        input: {
+          popup: `${root}src/popup/index.html`,
+          offscreen: `${root}src/offscreen/index.html`,
+        },
+      },
     },
   }),
   build({
