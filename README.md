@@ -96,7 +96,7 @@ browser only where it must: Chrome uses `background.service_worker`, Firefox use
 
 ## Roadmap
 
-See the project spec. Next is **Phase 0 (spike)**: prelogin, KDF, token login, sync, and decrypt,
+See [docs/PLAN.md](docs/PLAN.md) for the phased build plan. Next is **Phase 0 (spike)**: prelogin, KDF, token login, sync, and decrypt,
 verified against test vectors from the official clients, with a read-only popup and search.
 
 ## License
