@@ -27,7 +27,21 @@ vi.mock('webextension-polyfill', () => {
         onInstalled: { addListener: vi.fn() },
       },
       storage: { local: area(store), session: area(new Map<string, unknown>()) },
-      permissions: { request: vi.fn(() => Promise.resolve(true)) },
+      permissions: {
+        request: vi.fn(() => Promise.resolve(true)),
+        contains: vi.fn(() => Promise.resolve(false)),
+      },
+      privacy: {
+        services: {
+          passwordSavingEnabled: {
+            get: vi.fn(() =>
+              Promise.resolve({ value: true, levelOfControl: 'controllable_by_this_extension' }),
+            ),
+            set: vi.fn(() => Promise.resolve()),
+            clear: vi.fn(() => Promise.resolve()),
+          },
+        },
+      },
       tabs: {
         query: vi.fn(() =>
           Promise.resolve([{ id: 7, url: 'https://login.example.com/signin', active: true }]),

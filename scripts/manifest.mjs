@@ -41,6 +41,8 @@ export function createManifest(browser, pkg) {
     // into a tab opened before install, only on a fill gesture (activeTab).
     permissions: ['storage', 'alarms', 'activeTab', 'idle', 'clipboardWrite', 'scripting'],
     optional_host_permissions: ['https://*/*', 'http://*/*'],
+    // Asked for only when the user turns off the browser's built-in password manager.
+    optional_permissions: ['privacy'],
     content_scripts: [
       {
         matches: ['https://*/*', 'http://*/*'],

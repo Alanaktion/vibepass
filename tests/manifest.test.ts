@@ -30,5 +30,6 @@ describe('manifest', () => {
     ]);
     expect(createManifest('firefox', { version: '0.0.1' }).permissions).not.toContain('offscreen');
     expect(manifest.commands).toHaveProperty('fill-login');
+    expect(manifest.optional_permissions).toEqual(['privacy']);
   });
 });

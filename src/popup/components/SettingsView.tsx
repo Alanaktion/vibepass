@@ -1,7 +1,12 @@
-import { useEffect } from 'preact/hooks';
+import { useEffect, useState } from 'preact/hooks';
 import { sendMessage } from '../../shared/messaging';
 import { CLIPBOARD_CLEAR_CHOICES, LOCK_AFTER_CHOICES, type Settings } from '../../storage/settings';
 import { usePopup } from '../context';
+import {
+  builtInPasswordState,
+  setBuiltInPasswordsOff,
+  type BuiltInState,
+} from '../browserPasswords';
 import { errorMessage } from '../lib';
 
 interface Props {
@@ -17,6 +22,11 @@ const seconds = (s: number) =>
 export function SettingsView({ onBack, onSettings }: Props) {
   const ctx = usePopup();
   const settings = ctx.settings;
+  const [builtIn, setBuiltIn] = useState<BuiltInState | null>(null);
+
+  useEffect(() => {
+    void builtInPasswordState().then(setBuiltIn);
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -97,6 +107,26 @@ export function SettingsView({ onBack, onSettings }: Props) {
             />
             Copy the one-time password after filling a login
           </label>
+          <label class="check">
+            <input
+              type="checkbox"
+              checked={builtIn === 'off-by-us' || builtIn === 'off'}
+              disabled={builtIn === 'locked' || builtIn === 'other-extension' || builtIn === 'off'}
+              onChange={(e) => {
+                setBuiltInPasswordsOff(e.currentTarget.checked).then(setBuiltIn, (err: unknown) => {
+                  ctx.toast(errorMessage(err, 'Could not change the browser setting'));
+                });
+              }}
+            />
+            Turn off the browser’s built-in password manager
+          </label>
+          {builtIn === 'other-extension' && (
+            <p class="muted small">Another extension controls this setting.</p>
+          )}
+          {builtIn === 'locked' && (
+            <p class="muted small">Your administrator controls this setting.</p>
+          )}
+          {builtIn === 'off' && <p class="muted small">Already off in your browser settings.</p>}
           <label class="check">
             <input
               type="checkbox"

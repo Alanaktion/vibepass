@@ -23,6 +23,11 @@ autofill, and a calm item view. Nothing to migrate.
   for that site. It asks before filling anything else, or an https login into an http page.
 - Copied secrets are cleared from the clipboard after 30 seconds, and the vault locks after 15
   minutes idle or when your computer locks. Both are in Settings (gear icon).
+- To stop the browser's own password manager from offering to save or fill passwords, turn on
+  "Turn off the browser's built-in password manager" in Settings. Vibepass asks for the
+  `privacy` permission only then. Browsers have no API for an extension to register as the
+  password provider, so this is the closest equivalent (the official Bitwarden extension does
+  the same).
 
 ## Requirements
 
