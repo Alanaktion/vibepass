@@ -1,4 +1,4 @@
-import { Keyboard, Lock, RefreshCw, Settings, Star } from 'lucide-preact';
+import { Lock, RefreshCw, Settings, Star } from 'lucide-preact';
 import { Fragment } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { sendMessage } from '../../shared/messaging';
@@ -178,15 +178,16 @@ export function QuickFind({ onOpen, onSettings, query, onQuery }: Props) {
                   <span class="muted">{item.subtitle ?? itemHost ?? TYPE_LABEL[item.type]}</span>
                 </span>
                 {item.type === CipherType.Login && tab?.url && index === selected && (
-                  <IconButton
-                    icon={Keyboard}
-                    label="Fill"
-                    variant="fill"
+                  <button
+                    type="button"
+                    class="fill"
                     onClick={(e) => {
                       e.stopPropagation();
                       void fillItem(ctx, item.id);
                     }}
-                  />
+                  >
+                    Fill
+                  </button>
                 )}
               </li>
             </Fragment>

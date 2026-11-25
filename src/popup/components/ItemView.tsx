@@ -1,4 +1,4 @@
-import { ArrowLeft, Copy, Download, Eye, EyeOff, Keyboard } from 'lucide-preact';
+import { ArrowLeft, Copy, Download, Eye, EyeOff } from 'lucide-preact';
 import { useEffect, useState } from 'preact/hooks';
 import { sendMessage } from '../../shared/messaging';
 import { displayHost, toWebUrl } from '../../vault/uri';
@@ -67,14 +67,15 @@ export function ItemView({ id, onBack }: Props) {
         )}
         <h1 class="grow title">{item?.name ?? ''}</h1>
         {item && canFill && (
-          <IconButton
-            icon={Keyboard}
-            label="Fill"
-            variant="primary"
+          <button
+            type="button"
+            class="fill"
             onClick={() => {
               void fillItem(ctx, item.id);
             }}
-          />
+          >
+            Fill
+          </button>
         )}
       </header>
       {error && (

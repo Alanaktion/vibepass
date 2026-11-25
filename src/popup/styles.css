@@ -165,9 +165,9 @@ button:disabled {
 
 .icon {
   flex: none;
-  width: 24px;
-  height: 24px;
-  border-radius: 7px;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
   object-fit: contain;
 }
 
@@ -177,12 +177,13 @@ button:disabled {
   justify-content: center;
   background: color-mix(in srgb, var(--accent) 20%, var(--bg));
   color: var(--accent);
+  font-size: 0.85rem;
   font-weight: 700;
 }
 
 .item-header .icon {
-  width: 32px;
-  height: 32px;
+  width: 24px;
+  height: 24px;
 }
 
 button.primary,
@@ -190,6 +191,14 @@ button.fill {
   background: var(--accent);
   color: var(--accent-fg);
   border-color: var(--accent);
+}
+
+button.fill {
+  flex: none;
+  min-height: 28px;
+  padding: 4px 10px;
+  font-size: 0.9em;
+  cursor: pointer;
 }
 
 button.ghost {
@@ -212,7 +221,7 @@ button.icon-button {
   cursor: pointer;
 }
 
-button:is(.icon-button, .copy-value):focus-visible {
+button:is(.icon-button, .copy-value, .fill):focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }

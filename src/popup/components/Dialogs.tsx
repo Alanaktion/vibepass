@@ -112,8 +112,8 @@ export function ItemIcon({ name, src }: { name: string; src: string | null }) {
         class="icon"
         src={src}
         alt=""
-        width={24}
-        height={24}
+        width={18}
+        height={18}
         onError={() => {
           setFailed(true);
         }}

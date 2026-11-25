@@ -7,16 +7,15 @@ interface Props extends Omit<
 > {
   icon: LucideIcon;
   label: string;
-  variant?: 'ghost' | 'primary' | 'fill';
 }
 
 /** A compact action with a visible tooltip and an accessible name. */
-export function IconButton({ icon: Icon, label, variant = 'ghost', title, ...props }: Props) {
+export function IconButton({ icon: Icon, label, title, ...props }: Props) {
   return (
     <button
       {...props}
       type="button"
-      class={`icon-button ${variant}`}
+      class="icon-button ghost"
       aria-label={label}
       title={title ?? label}
     >

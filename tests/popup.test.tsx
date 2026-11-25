@@ -118,6 +118,7 @@ describe('popup', () => {
     render(<App />);
     expect(await screen.findByText('Suggested for login.example.com')).toBeTruthy();
     expect(screen.getByText('All items')).toBeTruthy();
+    expect((await screen.findByRole('button', { name: 'Fill' })).textContent).toBe('Fill');
     const search = screen.getByLabelText('Search vault');
     await waitFor(() => {
       expect(
@@ -169,6 +170,7 @@ describe('popup', () => {
     render(<App />);
     fireEvent.click(await screen.findByText('Example Login'));
     expect(await screen.findByText('alice')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Fill' }).textContent).toBe('Fill');
     expect(screen.getByText('hello notes')).toBeTruthy();
     expect(screen.queryByText('hunter2')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Reveal Password' }));
