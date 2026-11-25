@@ -22,3 +22,9 @@ Bitwarden Inc.
 - Licenses: MIT, MIT
 - Bundled in the background worker: MiniSearch for quick find, tldts (with the Public Suffix
   List, MPL-2.0 data) for registrable-domain matching.
+
+## Lucide (`lucide-preact`)
+
+- Licenses: ISC and MIT for icons derived from Feather (see `LICENSE-LUCIDE` in the extension build).
+- Source: https://github.com/lucide-icons/lucide
+- Bundled in the popup for action icons.

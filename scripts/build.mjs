@@ -107,6 +107,10 @@ await copyFile(
   `${outDir}/sdk/bitwarden_wasm_internal_bg.wasm`,
 );
 await copyFile(`${root}LICENSE`, `${outDir}/LICENSE`);
+await copyFile(
+  new URL('../../LICENSE', import.meta.resolve('lucide-preact')),
+  `${outDir}/LICENSE-LUCIDE`,
+);
 
 await writeFile(
   `${outDir}/manifest.json`,

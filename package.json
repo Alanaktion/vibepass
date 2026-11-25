@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "@bitwarden/sdk-internal": "0.2.0-main.1259",
+    "lucide-preact": "1.80.0",
     "minisearch": "7.2.0",
     "preact": "11.2.0",
     "tldts": "7.5.5",

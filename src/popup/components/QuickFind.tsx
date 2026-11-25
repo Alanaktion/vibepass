@@ -1,3 +1,4 @@
+import { Keyboard, Lock, RefreshCw, Settings, Star } from 'lucide-preact';
 import { Fragment } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { sendMessage } from '../../shared/messaging';
@@ -7,6 +8,7 @@ import { copyField, fillItem } from '../actions';
 import { usePopup } from '../context';
 import { hasMod, iconUrl, modLabel } from '../lib';
 import { ItemIcon } from './Dialogs';
+import { IconButton } from './IconButton';
 
 interface Props {
   onOpen: (id: string) => void;
@@ -120,25 +122,14 @@ export function QuickFind({ onOpen, onSettings, query, onQuery }: Props) {
           onKeyDown={onKeyDown}
           autoFocus
         />
-        <button
-          type="button"
-          class="ghost"
-          aria-label="Settings"
-          title="Settings"
-          onClick={onSettings}
-        >
-          ⚙
-        </button>
-        <button
-          type="button"
-          class="ghost"
-          title="Lock"
+        <IconButton icon={Settings} label="Settings" onClick={onSettings} />
+        <IconButton
+          icon={Lock}
+          label="Lock"
           onClick={() => {
             void sendMessage('vault:lock').then(ctx.onStatus);
           }}
-        >
-          Lock
-        </button>
+        />
       </header>
       {status.syncError && (
         <p role="alert" class="banner error">
@@ -181,25 +172,21 @@ export function QuickFind({ onOpen, onSettings, query, onQuery }: Props) {
                   <span class="name">
                     {item.name}
                     {item.favorite && (
-                      <span class="star" aria-label="Favorite">
-                        {' '}
-                        ★
-                      </span>
+                      <Star class="star" size={12} role="img" aria-label="Favorite" />
                     )}
                   </span>
                   <span class="muted">{item.subtitle ?? itemHost ?? TYPE_LABEL[item.type]}</span>
                 </span>
                 {item.type === CipherType.Login && tab?.url && index === selected && (
-                  <button
-                    type="button"
-                    class="fill"
+                  <IconButton
+                    icon={Keyboard}
+                    label="Fill"
+                    variant="fill"
                     onClick={(e) => {
                       e.stopPropagation();
                       void fillItem(ctx, item.id);
                     }}
-                  >
-                    Fill
-                  </button>
+                  />
                 )}
               </li>
             </Fragment>
@@ -213,18 +200,20 @@ export function QuickFind({ onOpen, onSettings, query, onQuery }: Props) {
         <span class="grow hints">
           ↵ fill · ⇧↵ open · {mod}C user · {mod}⇧C password
         </span>
-        <button
-          type="button"
-          class="link"
-          title={status.lastSync ? `Synced ${new Date(status.lastSync).toLocaleString()}` : 'Sync'}
+        <IconButton
+          icon={RefreshCw}
+          label="Sync"
+          title={
+            status.lastSync
+              ? `Sync · Last synced ${new Date(status.lastSync).toLocaleString()}`
+              : 'Sync'
+          }
           onClick={() => {
             sendMessage('vault:sync').then(ctx.onStatus, (e: unknown) => {
               ctx.toast(e instanceof Error ? e.message : 'Sync failed');
             });
           }}
-        >
-          Sync
-        </button>
+        />
       </footer>
     </main>
   );

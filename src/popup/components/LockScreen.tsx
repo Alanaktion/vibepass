@@ -1,6 +1,8 @@
+import { LogOut } from 'lucide-preact';
 import { useState } from 'preact/hooks';
 import type { VaultStatus } from '../../shared/messages';
 import { sendMessage } from '../../shared/messaging';
+import { IconButton } from './IconButton';
 
 interface Props {
   status: VaultStatus;
@@ -53,15 +55,15 @@ export function LockScreen({ status, onStatus }: Props) {
           {busy ? 'Unlocking…' : 'Unlock'}
         </button>
       </form>
-      <button
-        type="button"
-        class="link"
-        onClick={() => {
-          void sendMessage('vault:logout').then(onStatus);
-        }}
-      >
-        Log out
-      </button>
+      <div class="row footer">
+        <IconButton
+          icon={LogOut}
+          label="Log out"
+          onClick={() => {
+            void sendMessage('vault:logout').then(onStatus);
+          }}
+        />
+      </div>
     </main>
   );
 }

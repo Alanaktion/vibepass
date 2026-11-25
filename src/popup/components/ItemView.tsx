@@ -1,3 +1,4 @@
+import { ArrowLeft, Copy, Download, Eye, EyeOff, Keyboard } from 'lucide-preact';
 import { useEffect, useState } from 'preact/hooks';
 import { sendMessage } from '../../shared/messaging';
 import { displayHost, toWebUrl } from '../../vault/uri';
@@ -7,6 +8,7 @@ import { fillItem, pw } from '../actions';
 import { usePopup, type PopupContext } from '../context';
 import { copyText, downloadBase64, errorMessage, iconUrl, withReprompt } from '../lib';
 import { ItemIcon } from './Dialogs';
+import { IconButton } from './IconButton';
 
 interface Props {
   id: string;
@@ -56,9 +58,7 @@ export function ItemView({ id, onBack }: Props) {
   return (
     <main class="screen item">
       <header class="row item-header">
-        <button type="button" class="ghost back" aria-label="Back" onClick={onBack} autoFocus>
-          ←
-        </button>
+        <IconButton icon={ArrowLeft} label="Back" onClick={onBack} autoFocus />
         {item && (
           <ItemIcon
             name={item.name}
@@ -67,15 +67,14 @@ export function ItemView({ id, onBack }: Props) {
         )}
         <h1 class="grow title">{item?.name ?? ''}</h1>
         {item && canFill && (
-          <button
-            type="button"
-            class="primary"
+          <IconButton
+            icon={Keyboard}
+            label="Fill"
+            variant="primary"
             onClick={() => {
               void fillItem(ctx, item.id);
             }}
-          >
-            Fill
-          </button>
+          />
         )}
       </header>
       {error && (
@@ -121,17 +120,15 @@ function Detail({ item, ctx }: { item: CipherDetail; ctx: PopupContext }) {
                 ) : (
                   <span>{uri.uri}</span>
                 )}
-                <button
-                  type="button"
-                  class="ghost small"
+                <IconButton
+                  icon={Copy}
+                  label={`Copy website ${uri.uri}`}
                   onClick={() => {
                     void copyText(uri.uri).then(() => {
                       ctx.toast('Website copied');
                     });
                   }}
-                >
-                  Copy
-                </button>
+                />
               </div>
             );
           })}
@@ -152,15 +149,13 @@ function Detail({ item, ctx }: { item: CipherDetail; ctx: PopupContext }) {
                 {file.fileName}
                 {file.sizeName && <span class="muted"> · {file.sizeName}</span>}
               </span>
-              <button
-                type="button"
-                class="ghost small"
+              <IconButton
+                icon={Download}
+                label={`Download ${file.fileName}`}
                 onClick={() => {
                   void download(ctx, item.id, file.id);
                 }}
-              >
-                Download
-              </button>
+              />
             </div>
           ))}
         </section>
@@ -194,6 +189,9 @@ function FieldRow({
   const [revealed, setRevealed] = useState<string | null>(null);
   const concealed = field.kind === 'concealed';
   const shown = concealed ? revealed : field.value;
+  const masked = concealed && shown === null;
+  const copyLabel = `Copy ${field.label}`;
+  const valueClass = `value ${field.kind}${masked ? ' masked' : ''}`;
 
   async function secret(): Promise<string | null> {
     if (!concealed) return field.value;
@@ -232,24 +230,29 @@ function FieldRow({
   return (
     <div class="field">
       <span class="label">{field.label}</span>
-      <span class={`value ${field.kind}${concealed && shown === null ? ' masked' : ''}`}>
-        {shown ?? '••••••••••'}
-      </span>
+      {masked && field.canReveal ? (
+        <button
+          type="button"
+          class={`ghost copy-value ${valueClass}`}
+          aria-label={`${copyLabel} (masked)`}
+          title={copyLabel}
+          onClick={() => void copy()}
+        >
+          <span aria-hidden="true">••••••••••</span>
+        </button>
+      ) : (
+        <span class={valueClass}>{shown ?? '••••••••••'}</span>
+      )}
       <span class="actions">
         {concealed && field.canReveal && (
-          <button
-            type="button"
-            class="ghost small"
-            aria-pressed={revealed !== null}
+          <IconButton
+            icon={revealed === null ? Eye : EyeOff}
+            label={`${revealed === null ? 'Reveal' : 'Hide'} ${field.label}`}
             onClick={() => void toggle()}
-          >
-            {revealed === null ? 'Reveal' : 'Hide'}
-          </button>
+          />
         )}
         {(field.canReveal || !concealed) && field.kind !== 'boolean' && (
-          <button type="button" class="ghost small" onClick={() => void copy()}>
-            Copy
-          </button>
+          <IconButton icon={Copy} label={copyLabel} onClick={() => void copy()} />
         )}
         {!field.canReveal && <span class="muted small">Hidden by your organization</span>}
       </span>
@@ -311,9 +314,7 @@ function TotpRow({ itemId, label, ctx }: { itemId: string; label: string; ctx: P
     <div class="field totp">
       <span class="label">{label}</span>
       {needsPassword ? (
-        <button type="button" class="ghost small" onClick={() => void unlockCode()}>
-          Show code
-        </button>
+        <IconButton icon={Eye} label={`Show ${label}`} onClick={() => void unlockCode()} />
       ) : (
         <span class="value code" aria-live="off">
           {error ?? formatted ?? '••• •••'}
@@ -330,17 +331,15 @@ function TotpRow({ itemId, label, ctx }: { itemId: string; label: string; ctx: P
           </span>
         )}
         {code && (
-          <button
-            type="button"
-            class="ghost small"
+          <IconButton
+            icon={Copy}
+            label={`Copy ${label}`}
             onClick={() => {
               void copyText(code.code).then(() => {
                 ctx.toast('One-time password copied');
               });
             }}
-          >
-            Copy
-          </button>
+          />
         )}
       </span>
     </div>

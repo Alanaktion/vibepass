@@ -171,8 +171,61 @@ describe('popup', () => {
     expect(await screen.findByText('alice')).toBeTruthy();
     expect(screen.getByText('hello notes')).toBeTruthy();
     expect(screen.queryByText('hunter2')).toBeNull();
-    fireEvent.click(screen.getByText('Reveal'));
+    fireEvent.click(screen.getByRole('button', { name: 'Reveal Password' }));
     expect(await screen.findByText('hunter2')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Hide Password' }));
+    expect(screen.queryByText('hunter2')).toBeNull();
+  });
+
+  it('copies the masked value directly while keeping it concealed', async () => {
+    const calls = backend(base);
+    render(<App />);
+    fireEvent.click(await screen.findByText('Example Login'));
+    const masked = await screen.findByRole('button', { name: 'Copy Password (masked)' });
+    expect(calls.some((c) => c.type === 'vault:reveal')).toBe(false);
+    fireEvent.click(masked);
+    await waitFor(() => {
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith('hunter2');
+      expect(calls.some((c) => c.type === 'clipboard:copied')).toBe(true);
+    });
+    expect(calls.find((c) => c.type === 'vault:reveal')?.payload).toEqual({
+      id: 'a',
+      fieldId: 'login.password',
+    });
+    expect(screen.queryByText('hunter2')).toBeNull();
+    expect((await screen.findByRole('status')).textContent).toBe('Password copied · clears in 30s');
+  });
+
+  it('keeps organization-restricted masked values unavailable to copy', async () => {
+    const calls = backend(base, {
+      'vault:item': () => ({
+        ok: true,
+        data: {
+          ...detail,
+          sections: [
+            {
+              title: null,
+              fields: [
+                {
+                  id: 'login.password',
+                  label: 'Password',
+                  kind: 'concealed',
+                  value: null,
+                  canReveal: false,
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByText('Example Login'));
+    await screen.findByText('Hidden by your organization');
+    fireEvent.click(screen.getByText('••••••••••'));
+    expect(screen.queryByRole('button', { name: /^(Copy|Reveal) Password/ })).toBeNull();
+    expect(calls.some((c) => c.type === 'vault:reveal')).toBe(false);
+    expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
   });
 
   it('asks for the master password on re-prompt items', async () => {
@@ -187,11 +240,14 @@ describe('popup', () => {
     });
     render(<App />);
     fireEvent.click(await screen.findByText('Example Login'));
-    fireEvent.click(await screen.findByText('Reveal'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Copy Password (masked)' }));
     const input = await screen.findByLabelText('Master password');
     fireEvent.input(input, { target: { value: 'pw' } });
     fireEvent.click(screen.getByText('Continue'));
-    expect(await screen.findByText('hunter2')).toBeTruthy();
+    await waitFor(() => {
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith('hunter2');
+    });
+    expect(screen.queryByText('hunter2')).toBeNull();
     expect(attempts).toBe(2);
     expect(calls.filter((c) => c.type === 'vault:reveal')).toHaveLength(2);
   });

@@ -60,6 +60,14 @@ h1 {
   gap: 8px;
 }
 
+.search-bar {
+  align-items: center;
+}
+
+.search-bar input {
+  min-width: 0;
+}
+
 .grow {
   flex: 1;
 }
@@ -150,12 +158,15 @@ button:disabled {
 
 .star {
   color: #f59f00;
+  fill: currentColor;
+  margin-inline-start: 4px;
+  vertical-align: -1px;
 }
 
 .icon {
   flex: none;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   border-radius: 7px;
   object-fit: contain;
 }
@@ -170,8 +181,8 @@ button:disabled {
 }
 
 .item-header .icon {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
 }
 
 button.primary,
@@ -179,11 +190,6 @@ button.fill {
   background: var(--accent);
   color: var(--accent-fg);
   border-color: var(--accent);
-}
-
-button.fill {
-  padding: 4px 10px;
-  font-size: 0.9em;
 }
 
 button.ghost {
@@ -196,9 +202,19 @@ button.ghost:focus-visible {
   background: color-mix(in srgb, var(--fg) 8%, transparent);
 }
 
-button.small {
-  padding: 2px 8px;
-  font-size: 0.85em;
+button.icon-button {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  cursor: pointer;
+}
+
+button:is(.icon-button, .copy-value):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 button.link {
@@ -222,10 +238,6 @@ button.link {
   align-items: center;
   margin-top: 12px;
   font-size: 0.85em;
-}
-
-.footer button.link {
-  margin-top: 0;
 }
 
 .hints {
@@ -323,6 +335,13 @@ button.link {
 .field .value.masked {
   letter-spacing: 0.1em;
   color: var(--muted);
+}
+
+.field .copy-value {
+  min-height: 28px;
+  margin-inline-start: -5px;
+  padding: 3px 4px;
+  text-align: start;
 }
 
 .field .actions {

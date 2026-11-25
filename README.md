@@ -17,6 +17,8 @@ autofill, and a calm item view. Nothing to migrate.
   Down move, Enter fills the selected login into the page, Shift+Enter or Right opens it.
   Ctrl+C copies the username, Ctrl+Shift+C the password, Ctrl+Alt+C the one-time password
   (⌘ on macOS).
+- **In an item:** click a masked value or focus it and press Enter or Space to copy it.
+  Use the eye icon to reveal or hide it and the copy icon to copy a field.
 - **Fill without the popup:** Ctrl+Shift+L (⌘⇧L) fills the best match for the page. If the
   vault is locked or nothing matches, the popup opens instead.
 - Vibepass only fills on your gesture, only into the page's top frame, and only for items saved

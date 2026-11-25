@@ -1,3 +1,4 @@
+import { ArrowLeft, Lock, LogOut } from 'lucide-preact';
 import { useEffect, useState } from 'preact/hooks';
 import { sendMessage } from '../../shared/messaging';
 import { CLIPBOARD_CLEAR_CHOICES, LOCK_AFTER_CHOICES, type Settings } from '../../storage/settings';
@@ -8,6 +9,7 @@ import {
   type BuiltInState,
 } from '../browserPasswords';
 import { errorMessage } from '../lib';
+import { IconButton } from './IconButton';
 
 interface Props {
   onBack: () => void;
@@ -50,9 +52,7 @@ export function SettingsView({ onBack, onSettings }: Props) {
   return (
     <main class="screen settings">
       <header class="row item-header">
-        <button type="button" class="ghost back" aria-label="Back" onClick={onBack} autoFocus>
-          ←
-        </button>
+        <IconButton icon={ArrowLeft} label="Back" onClick={onBack} autoFocus />
         <h1 class="grow title">Settings</h1>
       </header>
       {settings && (
@@ -160,22 +160,20 @@ export function SettingsView({ onBack, onSettings }: Props) {
           )}
         </p>
         <div class="row">
-          <button
-            type="button"
+          <IconButton
+            icon={Lock}
+            label="Lock now"
             onClick={() => {
               void sendMessage('vault:lock').then(ctx.onStatus);
             }}
-          >
-            Lock now
-          </button>
-          <button
-            type="button"
+          />
+          <IconButton
+            icon={LogOut}
+            label="Log out"
             onClick={() => {
               void sendMessage('vault:logout').then(ctx.onStatus);
             }}
-          >
-            Log out
-          </button>
+          />
         </div>
         <p class="muted small">
           Shortcuts: open Vibepass with Ctrl+Shift+Space, fill the best match with Ctrl+Shift+L (⌘

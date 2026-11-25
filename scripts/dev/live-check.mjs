@@ -251,7 +251,7 @@ try {
     await popup.screenshot({ path: join(shots, 'quick-find.png') });
     await popup.getByText('Local Test Site').click();
     await popup.getByText('Recovery PIN').waitFor();
-    await popup.getByRole('button', { name: 'Reveal' }).first().click();
+    await popup.getByRole('button', { name: 'Reveal Password', exact: true }).click();
     await popup.waitForTimeout(300);
     await popup.screenshot({ path: join(shots, 'item.png') });
   }
