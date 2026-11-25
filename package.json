@@ -1,0 +1,43 @@
+{
+  "name": "vibepass",
+  "version": "0.0.1",
+  "private": true,
+  "description": "A keyboard-first browser extension for self-hosted Bitwarden and Vaultwarden servers.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "dev": "node scripts/build.mjs --browser chrome --watch",
+    "dev:firefox": "node scripts/build.mjs --browser firefox --watch",
+    "build": "node scripts/build.mjs --browser chrome && node scripts/build.mjs --browser firefox",
+    "build:chrome": "node scripts/build.mjs --browser chrome",
+    "build:firefox": "node scripts/build.mjs --browser firefox",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "npm run typecheck && npm run lint && npm run format:check && npm test"
+  },
+  "dependencies": {
+    "preact": "11.2.0",
+    "webextension-polyfill": "0.12.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@testing-library/preact": "3.2.6",
+    "@types/node": "22.20.5",
+    "@types/webextension-polyfill": "0.12.6",
+    "eslint": "10.15.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "globals": "17.14.0",
+    "happy-dom": "21.0.4",
+    "prettier": "3.10.1",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.74.0",
+    "vite": "8.3.8",
+    "vitest": "5.1.1"
+  }
+}

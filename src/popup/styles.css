@@ -1,0 +1,123 @@
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --fg: #1a1a1f;
+  --muted: #6b6b76;
+  --border: #dcdce3;
+  --accent: #3b5bdb;
+  --accent-fg: #ffffff;
+  --error: #c92a2a;
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    sans-serif;
+  font-size: 14px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #18181c;
+    --fg: #ececf1;
+    --muted: #9a9aa6;
+    --border: #33333b;
+    --accent: #748ffc;
+    --accent-fg: #0b0b0f;
+    --error: #ff8787;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  width: 360px;
+  min-height: 420px;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+h1 {
+  font-size: 1.4rem;
+  margin: 0 0 4px;
+}
+
+.screen {
+  padding: 16px;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+}
+
+.grow {
+  flex: 1;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-weight: 500;
+}
+
+input,
+button {
+  font: inherit;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: inherit;
+}
+
+button[type='submit'] {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.5;
+}
+
+.muted {
+  color: var(--muted);
+  margin: 0;
+}
+
+.error {
+  color: var(--error);
+  margin: 0;
+}
+
+.results {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+}
+
+.results li {
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  border-radius: 6px;
+}
+
+.results li[aria-selected='true'] {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+.name {
+  font-weight: 600;
+}
