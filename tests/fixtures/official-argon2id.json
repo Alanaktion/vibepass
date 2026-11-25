@@ -1,0 +1,176 @@
+{
+  "_comment": "Throwaway test account on a local Vaultwarden 1.37.5. Items were created by the official Bitwarden web vault 2026.10.1 (bundled with Vaultwarden). Regenerate with scripts/dev; never put real data here. masterPasswordHash is what the official web vault sent at login.",
+  "email": "official-argon2@vibepass.test",
+  "password": "correct horse battery staple",
+  "masterPasswordHash": "y8khDJrNlwAkrUAezn7WvU1JaCZ28ebQyO6iNVaLk0Y=",
+  "expected": {
+    "folders": ["Work"],
+    "items": [
+      {
+        "name": "Example Login",
+        "type": 1,
+        "username": "alice@example.com",
+        "password": "hunter2-Example!",
+        "totp": "JBSWY3DPEHPK3PXP",
+        "uris": ["https://login.example.com/signin"],
+        "notes": "Notes with ünïcødé ✓"
+      },
+      {
+        "name": "Server notes",
+        "type": 2,
+        "notes": "secret note body"
+      }
+    ]
+  },
+  "sync": {
+    "ciphers": [
+      {
+        "archivedDate": null,
+        "attachments": null,
+        "bankAccount": null,
+        "card": null,
+        "collectionIds": [],
+        "creationDate": "2026-11-25T03:59:46.052610Z",
+        "deletedDate": null,
+        "driversLicense": null,
+        "edit": true,
+        "favorite": false,
+        "fields": [],
+        "folderId": null,
+        "id": "693b66e2-ffcd-4bcc-9509-8c870a2dd9f7",
+        "identity": null,
+        "key": "2.9uX0tUvpg3t2ERowfo58cg==|d+yy1jK49P+MKYZFv8gKG+lWTbIYej/et729iHN0HFcrBJt+Esg3mFKqWtKBWhMpANKiSP6w4otCSbdh3HWPOHboMMI/2q/VHSk/TtmMKeM=|6QbM+H6+amWn0uDiY8LAfh5JRrJj0H37qNzGoUhHnXQ=",
+        "login": null,
+        "name": "2.hLhwU9wloqJCIYfYyElkYw==|UwWiwBsZeOnquKV1YmG8fQ==|uWYIPuF1DQdsSm9O8s6F6OlffjSBqo7y/sr8LuC/eXE=",
+        "notes": "2.WLv9JOMIFCPyCTZOjM4jtQ==|yFq6a5TDASmSRWN/iOBEeJNYrWhymoV1bPoA4LvvJGQ=|Gum1epXv3CO7rYlkH1CCYkKZ23wzK5V/97Msm8gLqyE=",
+        "object": "cipherDetails",
+        "organizationId": null,
+        "organizationUseTotp": true,
+        "passport": null,
+        "passwordHistory": [],
+        "permissions": {
+          "delete": true,
+          "restore": true
+        },
+        "reprompt": 0,
+        "revisionDate": "2026-11-25T03:59:46.052745Z",
+        "secureNote": {
+          "type": 0
+        },
+        "sshKey": null,
+        "type": 2,
+        "viewPassword": true
+      },
+      {
+        "archivedDate": null,
+        "attachments": null,
+        "bankAccount": null,
+        "card": null,
+        "collectionIds": [],
+        "creationDate": "2026-11-25T03:59:38.327248Z",
+        "deletedDate": null,
+        "driversLicense": null,
+        "edit": true,
+        "favorite": false,
+        "fields": [],
+        "folderId": null,
+        "id": "a0bb822f-4686-4bf7-8cd0-3573f4d05be0",
+        "identity": null,
+        "key": "2.XovE/uTATNDhV6mMIs6f5g==|sv6bWzwbL0VLzKiHYDpZUUlqj1bNSZVuuq1sOieOOEFNjwtG9EoZTvzEqElOCwOCoSDBYXk5f53/XdIVWHIJ/grHDKJbx/xZjSwR3MUL0BU=|5BNLUe+ncmi/zRo8hNLQFjNrD8gzR/ptrMH9R0tGCDs=",
+        "login": {
+          "password": "2.GQQskZPyh5RQ9MRiOkeuVA==|Twc0f1exkUDePR5LQagXoh4qYYRaJaHbld5XPkjhzFM=|QKwY3d9715lzocoqogRhiH5Af0+uFTQzPaJ4ZfVII8U=",
+          "passwordRevisionDate": null,
+          "totp": "2.3+G9gBDgfgjyLubSwNSTtA==|uuB8hQ/9TDwVud8lJJr/NZyUZJDc+eBIFciGO7iZ/yo=|zfqP+DyhhjAfKFCUoctKBuf1Kb2ri40PabAFk4VQ8ao=",
+          "uri": "2.KCzdapbQyZqZDWi8jsHWXQ==|Asxj5QyaQQOajrtlpr3GSx+YI69QzHSFmzc8C36vDBB/MjkiYqUd4x7rTiulqpNv|ekFKuI3eTT91mYokfv/zGmqWsViCwITZFpJbWhHvJow=",
+          "uris": [
+            {
+              "match": null,
+              "uri": "2.KCzdapbQyZqZDWi8jsHWXQ==|Asxj5QyaQQOajrtlpr3GSx+YI69QzHSFmzc8C36vDBB/MjkiYqUd4x7rTiulqpNv|ekFKuI3eTT91mYokfv/zGmqWsViCwITZFpJbWhHvJow=",
+              "uriChecksum": "2.ejZsjLbMqvtllXBFtgD0pw==|2o1Pyb1gwuYqT7xFEEmShKHJRH2w7fdTNbd76rLWrZlhpOjL4DW5eURR85g9rt3+|zSlY+anNK03x9k6LQoep2tN1e+2roWLo+wrROiJHBvo="
+            }
+          ],
+          "username": "2.NVZ/T6ItBY95D8nBhsFT6w==|QuZFj75H9JxYHKHlBmA8VRrbqRuc0I6LZ6G6XUOiiUE=|6vuW1SvHjpeJL2PNIFckKvxdOaYQMThq7+ZKxLAAgOI="
+        },
+        "name": "2.Mc2R7u7kfNzf9+JlCMi7iQ==|qAGH3po+UUCLMUepp/MBQA==|HoPS4OLjKzzXahC/X5I0QQJ7nEOU6ndPcg+PAmQe3HI=",
+        "notes": "2.1n1k0pXNuPzWYElVrzuWwA==|VWb3XTBFDUAhjz0obZ5/TfcUb4BJvdFU6sutYgzQgjI=|OgWUut2b1hCaVaLNhL6pJimwVYc+mSq8e7B99MFY7So=",
+        "object": "cipherDetails",
+        "organizationId": null,
+        "organizationUseTotp": true,
+        "passport": null,
+        "passwordHistory": [],
+        "permissions": {
+          "delete": true,
+          "restore": true
+        },
+        "reprompt": 0,
+        "revisionDate": "2026-11-25T03:59:38.327502Z",
+        "secureNote": null,
+        "sshKey": null,
+        "type": 1,
+        "viewPassword": true
+      }
+    ],
+    "collections": [],
+    "domains": null,
+    "folders": [
+      {
+        "id": "9050e21e-2458-412d-8a41-dd158b79e744",
+        "name": "2.iMxd0bD1dSKtpO9fHE/6SA==|1YBynr+4zknxqMRvOy7QbA==|gsprJMUVZShenG658QNklK/mVhs4ORMSTKd5jm/zlfI=",
+        "object": "folder",
+        "revisionDate": "2026-11-25T03:59:33.586494Z"
+      }
+    ],
+    "object": "sync",
+    "policies": [],
+    "policiesNew": [],
+    "profile": {
+      "_status": 0,
+      "accountKeys": {
+        "object": "privateKeys",
+        "publicKeyEncryptionKeyPair": {
+          "object": "publicKeyEncryptionKeyPair",
+          "publicKey": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArycz3ub1dcA9AriIuflCJymHWxg+ogyrzlRDZqB27VXD6XuCeFUNgmQf89X0UylNDI3/IqWTt0L5ty76RMLmopoVVip4zGtMMwdQWuxW9N8909ea6LFucnmgDdbftp3tk2rAxCjXdJn1PpJAxLBQnPcGfNPwBgN2afCnzkLersxocc0MuotiCYXwMYDZNkwwPHggVrC2ljII+GFlK39V1WLwcbg2pq17IYl3uicfxkMZsYBIa4q/pSxmCJBBndAl7jHpHEEN+31XPBazKMSNlmZrNDw83strkPEqYt4wI1SYBQiHeUSlIYXjjaQwzsbuO9aPE7DkvWk+/YbuxQkKtwIDAQAB",
+          "signedPublicKey": null,
+          "wrappedPrivateKey": "2.qr5lyQdsnhBPXrvuCPuFNQ==|h7HDFgLKyHdvgquBspWA56+a0ELCtAsBHyhse2JMT/6Fv7O1/89+EllQhuMWGjC0iis8CoOi+OUQrij4dAwvGyM7NIXr5BbDWC+9t4eCFJ0L7wmcctfIFnPF882JCvJFC6sZxyC1L7ChFTnPs0UYJ5SMLw5hZcFShuRp1QOWZxY4QUHNk/L7xiIgG7T0bRsJdNC2mHSETr60GR8k8tWYbKkUH0CzrpyJOlw5Pbj437Cy2wNkEW5pmsr2K9inoAcGc+eKkbQiSLs1TpTiygo7xeY92c3Du/5UNMIatHApPjyf6VzUGO2Kbrn0BVzpTkvhUWDMcTiFjO7XZv+DxWk6jkoM081WDy5+t8ONFuFOfFBIyTpTc3FRhQzOKoqSMOVQUxOKU+nZUWJegiVO3LkaLfAQSSw5/ROsDbYgFYKaKDDxmYLXUKAQCvK5Xw0ALJBPZ5wdPJ0ENLCMe+V7HSjEgK7jCRnKXMaxyRG5RHG2TwOa5k6VEUY3J4ruG111C9IeTcvcpJRPlXAw9DmuGozPju5gDd/zAO3isjSRJOHk8SYxAE9rGL1Wr3zV64mGfWfXYORxDJE9EBx6SzxnJ9zh7u7NkX5BmnjXO8d3/OatGuKvNl5+v/OOMYR3WXB7cpF+0MTAulcwiov1xeul51WvZikqlOHoJ0BVsL/kAaRbGk0lyEvwBTj1I0p4I9nCzTD0cx9iyWKxRicXdyh4nb2RGZlWq++RPfpVeNfEsLEg9zRhaOyeZ2X/tS3hCoZiT5ThXy0tmr+iWBYQj8DjsBGbnKKZH27cpjJc9wkSGMICnXutCcu4y30oQPlKk8zNYxqOJX2eWnyJKRCyR60++V/kmG9EXWBLJZAhQF60dNw+/tAlxEF1bmKXazDtfnl0X13StIZXJI4MmU7/ajfEuigGJ6fFDiuV0Ti8Tgapqrdp2I/T1Q6B7A4DU5GI76WwRDumtN1ORm7NXninPRA6hzdQ9dwrvIqzEF9q71VuUNxnAnxKbIADooHpi3q3NfsbQ47LG5m6DhFZ368FBGCSigVj4tA6BjB7zT3M1taD6JcJgOVpGcwQDkiSCOLeWpJD+EYfN5s9bRpMA7r2y3Kps5SozoLAkEbiWFM7IFlztAUfRCOc5YjOos52E24k8mbLTBtInyD5NNQNL0Q33wtf/inyyMa8uKMfzr7zv/ghf3CskBJzdC0dnPI9lFO8myyfqT1+T8WP2kUd2w/nBfiUDGyJtQyhE5K/GO6kwiE0ZYiNLfyRIJf/C+oH5WH3o0IYKQYZ7AouVj/D64AbOGAMdzv4jA2PKR3s/RzcSETr1UApAFW5jeawCy7hTbuljsA/0WPwur5o7mESfrtsgk0PefyODkpON9VA4ONwxoOYWngTZnX3nW6zaWNO4UlAgsDiIwikI7IAh4HoTwOQPGVQMmFoHb83vt8TdTR5MQarqH4ZWV/f5rWAlDBn0zSM1HJls+pr2M6Jmzy75rbPrGdPnFsvNq6XMaTNcJFtHENAa0+lcwW3j3KLTeTuVMyvKa8TSJxBjvpwiek/mW5iuA/35C/yT/uJiuqPe18emlc7j9s4RvK5KeRAD3tLwjrWCXzAYFuVJkY3ODBNtHErDq2iHRmCEREHEZPMWYHzfFWvZ+nlOnA=|kgLwPasYki6rQjokYJJhqNlroEzd1N1oA9Zw5G4XYuY="
+        },
+        "securityState": null,
+        "signatureKeyPair": null
+      },
+      "avatarColor": null,
+      "creationDate": "2026-11-25T03:59:21.975236Z",
+      "culture": "en-US",
+      "email": "official-argon2@vibepass.test",
+      "emailVerified": true,
+      "forcePasswordReset": false,
+      "id": "85e3adee-02b0-49c8-ba34-79e439a42da4",
+      "key": "2.9ZuYbAwQbdEoGUVhv5VwpA==|TNgO2mJhsAdv3fqgheuoEw3gpDR80RfBAS9D7Ws0tK9U3kbGJ+zTfjy9N9eqKl6zsPnkSHMAmzhp0i7zNkL29wqQ9doaDvLTMTwHWrv2dMg=|f6o50yGDxGdb8xJl9ZClE93BSCykukqIla4GGrejY08=",
+      "name": "Test User",
+      "object": "profile",
+      "organizations": [],
+      "organizationsNew": [],
+      "premium": true,
+      "premiumFromOrganization": false,
+      "privateKey": "2.qr5lyQdsnhBPXrvuCPuFNQ==|h7HDFgLKyHdvgquBspWA56+a0ELCtAsBHyhse2JMT/6Fv7O1/89+EllQhuMWGjC0iis8CoOi+OUQrij4dAwvGyM7NIXr5BbDWC+9t4eCFJ0L7wmcctfIFnPF882JCvJFC6sZxyC1L7ChFTnPs0UYJ5SMLw5hZcFShuRp1QOWZxY4QUHNk/L7xiIgG7T0bRsJdNC2mHSETr60GR8k8tWYbKkUH0CzrpyJOlw5Pbj437Cy2wNkEW5pmsr2K9inoAcGc+eKkbQiSLs1TpTiygo7xeY92c3Du/5UNMIatHApPjyf6VzUGO2Kbrn0BVzpTkvhUWDMcTiFjO7XZv+DxWk6jkoM081WDy5+t8ONFuFOfFBIyTpTc3FRhQzOKoqSMOVQUxOKU+nZUWJegiVO3LkaLfAQSSw5/ROsDbYgFYKaKDDxmYLXUKAQCvK5Xw0ALJBPZ5wdPJ0ENLCMe+V7HSjEgK7jCRnKXMaxyRG5RHG2TwOa5k6VEUY3J4ruG111C9IeTcvcpJRPlXAw9DmuGozPju5gDd/zAO3isjSRJOHk8SYxAE9rGL1Wr3zV64mGfWfXYORxDJE9EBx6SzxnJ9zh7u7NkX5BmnjXO8d3/OatGuKvNl5+v/OOMYR3WXB7cpF+0MTAulcwiov1xeul51WvZikqlOHoJ0BVsL/kAaRbGk0lyEvwBTj1I0p4I9nCzTD0cx9iyWKxRicXdyh4nb2RGZlWq++RPfpVeNfEsLEg9zRhaOyeZ2X/tS3hCoZiT5ThXy0tmr+iWBYQj8DjsBGbnKKZH27cpjJc9wkSGMICnXutCcu4y30oQPlKk8zNYxqOJX2eWnyJKRCyR60++V/kmG9EXWBLJZAhQF60dNw+/tAlxEF1bmKXazDtfnl0X13StIZXJI4MmU7/ajfEuigGJ6fFDiuV0Ti8Tgapqrdp2I/T1Q6B7A4DU5GI76WwRDumtN1ORm7NXninPRA6hzdQ9dwrvIqzEF9q71VuUNxnAnxKbIADooHpi3q3NfsbQ47LG5m6DhFZ368FBGCSigVj4tA6BjB7zT3M1taD6JcJgOVpGcwQDkiSCOLeWpJD+EYfN5s9bRpMA7r2y3Kps5SozoLAkEbiWFM7IFlztAUfRCOc5YjOos52E24k8mbLTBtInyD5NNQNL0Q33wtf/inyyMa8uKMfzr7zv/ghf3CskBJzdC0dnPI9lFO8myyfqT1+T8WP2kUd2w/nBfiUDGyJtQyhE5K/GO6kwiE0ZYiNLfyRIJf/C+oH5WH3o0IYKQYZ7AouVj/D64AbOGAMdzv4jA2PKR3s/RzcSETr1UApAFW5jeawCy7hTbuljsA/0WPwur5o7mESfrtsgk0PefyODkpON9VA4ONwxoOYWngTZnX3nW6zaWNO4UlAgsDiIwikI7IAh4HoTwOQPGVQMmFoHb83vt8TdTR5MQarqH4ZWV/f5rWAlDBn0zSM1HJls+pr2M6Jmzy75rbPrGdPnFsvNq6XMaTNcJFtHENAa0+lcwW3j3KLTeTuVMyvKa8TSJxBjvpwiek/mW5iuA/35C/yT/uJiuqPe18emlc7j9s4RvK5KeRAD3tLwjrWCXzAYFuVJkY3ODBNtHErDq2iHRmCEREHEZPMWYHzfFWvZ+nlOnA=|kgLwPasYki6rQjokYJJhqNlroEzd1N1oA9Zw5G4XYuY=",
+      "providerOrganizations": [],
+      "providers": [],
+      "securityStamp": "20819f04-8a3b-49bb-a54f-fcd4a5c414de",
+      "twoFactorEnabled": false,
+      "usesKeyConnector": false
+    },
+    "sends": [],
+    "userDecryption": {
+      "masterPasswordUnlock": {
+        "kdf": {
+          "iterations": 3,
+          "kdfType": 1,
+          "memory": 64,
+          "parallelism": 4
+        },
+        "masterKeyEncryptedUserKey": "2.9ZuYbAwQbdEoGUVhv5VwpA==|TNgO2mJhsAdv3fqgheuoEw3gpDR80RfBAS9D7Ws0tK9U3kbGJ+zTfjy9N9eqKl6zsPnkSHMAmzhp0i7zNkL29wqQ9doaDvLTMTwHWrv2dMg=|f6o50yGDxGdb8xJl9ZClE93BSCykukqIla4GGrejY08=",
+        "masterKeyWrappedUserKey": "2.9ZuYbAwQbdEoGUVhv5VwpA==|TNgO2mJhsAdv3fqgheuoEw3gpDR80RfBAS9D7Ws0tK9U3kbGJ+zTfjy9N9eqKl6zsPnkSHMAmzhp0i7zNkL29wqQ9doaDvLTMTwHWrv2dMg=|f6o50yGDxGdb8xJl9ZClE93BSCykukqIla4GGrejY08=",
+        "salt": "official-argon2@vibepass.test"
+      },
+      "userKeyId": "d816b8f737f5ee90d0445879f6dc0b5c"
+    }
+  }
+}

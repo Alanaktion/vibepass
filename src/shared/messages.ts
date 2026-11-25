@@ -13,12 +13,19 @@ export interface VaultStatus {
   serverUrl: string | null;
   email: string | null;
   lastSync: string | null;
+  /** Number of items in the unlocked vault; 0 while locked. */
+  itemCount: number;
 }
 
 /** Map of message type -> { request payload, response payload }. */
 export interface MessageMap {
   'vault:status': { request: undefined; response: VaultStatus };
+  'vault:login': {
+    request: { serverUrl: string; email: string; masterPassword: string };
+    response: VaultStatus;
+  };
   'vault:unlock': { request: { masterPassword: string }; response: VaultStatus };
+  'vault:logout': { request: undefined; response: VaultStatus };
   'vault:lock': { request: undefined; response: VaultStatus };
   'vault:sync': { request: undefined; response: VaultStatus };
   'vault:search': { request: { query: string; url?: string }; response: CipherSummary[] };
@@ -41,7 +48,9 @@ export type Envelope<T> = { ok: true; data: T } | { ok: false; error: string };
 
 const MESSAGE_TYPES: readonly MessageType[] = [
   'vault:status',
+  'vault:login',
   'vault:unlock',
+  'vault:logout',
   'vault:lock',
   'vault:sync',
   'vault:search',

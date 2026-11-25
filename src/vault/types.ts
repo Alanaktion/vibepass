@@ -22,3 +22,8 @@ export interface CipherSummary {
   favorite: boolean;
   folderId: string | null;
 }
+
+export interface FolderSummary {
+  id: string;
+  name: string;
+}

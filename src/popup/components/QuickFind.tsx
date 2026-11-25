@@ -4,13 +4,15 @@ import { sendMessage } from '../../shared/messaging';
 import type { CipherSummary } from '../../vault/types';
 
 interface Props {
-  onLock: (status: VaultStatus) => void;
+  status: VaultStatus;
+  onStatus: (status: VaultStatus) => void;
 }
 
-/** Keyboard-first search. Arrow keys, Enter to fill, and copy chords come in Phase 1. */
-export function QuickFind({ onLock }: Props) {
+/** Read-only search (Phase 0). Arrow keys, Enter to fill, and copy chords come in Phase 1. */
+export function QuickFind({ status, onStatus }: Props) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<CipherSummary[]>([]);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -25,7 +27,15 @@ export function QuickFind({ onLock }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [query]);
+    // Re-run when a sync changes the vault, not only when the query changes.
+  }, [query, status.lastSync, status.itemCount]);
+
+  function sync() {
+    setSyncError(null);
+    sendMessage('vault:sync').then(onStatus, (e: unknown) => {
+      setSyncError(e instanceof Error ? e.message : 'Sync failed');
+    });
+  }
 
   return (
     <main class="screen">
@@ -44,7 +54,7 @@ export function QuickFind({ onLock }: Props) {
         <button
           type="button"
           onClick={() => {
-            void sendMessage('vault:lock').then(onLock);
+            void sendMessage('vault:lock').then(onStatus);
           }}
         >
           Lock
@@ -59,6 +69,20 @@ export function QuickFind({ onLock }: Props) {
         ))}
       </ul>
       {results.length === 0 && <p class="muted">No items</p>}
+      {syncError && (
+        <p role="alert" class="error">
+          {syncError}
+        </p>
+      )}
+      <footer class="row footer muted">
+        <span class="grow">
+          {status.itemCount} {status.itemCount === 1 ? 'item' : 'items'}
+          {status.lastSync && ` · synced ${new Date(status.lastSync).toLocaleTimeString()}`}
+        </span>
+        <button type="button" class="link" onClick={sync}>
+          Sync
+        </button>
+      </footer>
     </main>
   );
 }

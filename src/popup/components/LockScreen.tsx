@@ -50,9 +50,18 @@ export function LockScreen({ status, onStatus }: Props) {
           </p>
         )}
         <button type="submit" disabled={busy || password === ''}>
-          Unlock
+          {busy ? 'Unlocking…' : 'Unlock'}
         </button>
       </form>
+      <button
+        type="button"
+        class="link"
+        onClick={() => {
+          void sendMessage('vault:logout').then(onStatus);
+        }}
+      >
+        Log out
+      </button>
     </main>
   );
 }

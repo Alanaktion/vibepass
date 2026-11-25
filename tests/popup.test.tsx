@@ -10,7 +10,7 @@ function mockStatus(status: VaultStatus) {
 
 describe('popup', () => {
   it('shows setup when logged out', async () => {
-    mockStatus({ state: 'logged-out', serverUrl: null, email: null, lastSync: null });
+    mockStatus({ state: 'logged-out', serverUrl: null, email: null, lastSync: null, itemCount: 0 });
     render(<App />);
     expect(await screen.findByLabelText('Server URL')).toBeTruthy();
   });
@@ -21,6 +21,7 @@ describe('popup', () => {
       serverUrl: 'https://vault.example.com',
       email: 'me@example.com',
       lastSync: null,
+      itemCount: 0,
     });
     render(<App />);
     expect(await screen.findByLabelText('Master password')).toBeTruthy();

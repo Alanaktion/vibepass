@@ -1,37 +1,28 @@
-import { NotImplementedError } from '../shared/errors';
 import { log } from '../shared/log';
 import type { SearchIndex } from '../search';
 import type { VaultState } from '../vault/state';
 import type { Handlers } from './router';
+import type { VaultService } from './service';
 
 export interface BackgroundContext {
   vault: VaultState;
   search: SearchIndex;
+  service: VaultService;
 }
 
-/**
- * Message handlers. Unlock and sync are stubs until the API client and crypto land (Phase 0).
- */
-export function createHandlers({ vault, search }: BackgroundContext): Handlers {
+/** Message handlers. They stay thin: VaultService owns the order of operations. */
+export function createHandlers({ vault, search, service }: BackgroundContext): Handlers {
   return {
-    'vault:status': () => vault.status(),
+    'vault:status': () => service.status(),
+    'vault:login': ({ serverUrl, email, masterPassword }) =>
+      service.login(serverUrl, email, masterPassword),
+    'vault:unlock': ({ masterPassword }) => service.unlock(masterPassword),
+    'vault:lock': () => service.lock(),
+    'vault:logout': () => service.logout(),
+    'vault:sync': () => service.sync(),
 
-    'vault:unlock': () => {
-      // Phase 0: prelogin -> deriveMasterKey -> token login -> decryptUserKey -> sync -> index.
-      throw new NotImplementedError('vault:unlock');
-    },
-
-    'vault:lock': () => {
-      vault.lock();
-      search.clear();
-      return vault.status();
-    },
-
-    'vault:sync': () => {
-      throw new NotImplementedError('vault:sync');
-    },
-
-    'vault:search': ({ query, url }) => {
+    'vault:search': async ({ query, url }) => {
+      await service.status();
       if (!vault.isUnlocked) return [];
       return search.search(query, url === undefined ? {} : { url });
     },

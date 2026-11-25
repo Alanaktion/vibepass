@@ -9,7 +9,8 @@
  * - background: single ES module (service worker in Chrome, module script in Firefox)
  * - content:    single classic script (IIFE); content scripts can't be ES modules
  */
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { build } from 'vite';
@@ -92,7 +93,16 @@ await Promise.all([
 const pkg = /** @type {{ version: string }} */ (
   JSON.parse(await readFile(`${root}package.json`, 'utf8'))
 );
-await mkdir(outDir, { recursive: true });
+await mkdir(`${outDir}/sdk`, { recursive: true });
+
+// Bitwarden's SDK (GPL-3.0) is loaded at runtime by src/crypto/sdk.ts from sdk/.
+const require = createRequire(import.meta.url);
+await copyFile(
+  require.resolve('@bitwarden/sdk-internal/bitwarden_wasm_internal_bg.wasm'),
+  `${outDir}/sdk/bitwarden_wasm_internal_bg.wasm`,
+);
+await copyFile(`${root}LICENSE`, `${outDir}/LICENSE`);
+
 await writeFile(
   `${outDir}/manifest.json`,
   `${JSON.stringify(createManifest(browser, pkg), null, 2)}\n`,

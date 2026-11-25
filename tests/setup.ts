@@ -6,25 +6,28 @@ import { vi } from 'vitest';
  */
 vi.mock('webextension-polyfill', () => {
   const store = new Map<string, unknown>();
+  const area = (map: Map<string, unknown>) => ({
+    get: vi.fn((key: string) => Promise.resolve(map.has(key) ? { [key]: map.get(key) } : {})),
+    set: vi.fn((items: Record<string, unknown>) => {
+      for (const [k, v] of Object.entries(items)) map.set(k, v);
+      return Promise.resolve();
+    }),
+    remove: vi.fn((key: string) => {
+      map.delete(key);
+      return Promise.resolve();
+    }),
+  });
   return {
     default: {
       runtime: {
         id: 'test-extension-id',
+        getURL: (path: string) => `chrome-extension://test-extension-id/${path}`,
         sendMessage: vi.fn(),
         onMessage: { addListener: vi.fn() },
         onInstalled: { addListener: vi.fn() },
       },
-      storage: {
-        local: {
-          get: vi.fn((key: string) =>
-            Promise.resolve(store.has(key) ? { [key]: store.get(key) } : {}),
-          ),
-          set: vi.fn((items: Record<string, unknown>) => {
-            for (const [k, v] of Object.entries(items)) store.set(k, v);
-            return Promise.resolve();
-          }),
-        },
-      },
+      storage: { local: area(store), session: area(new Map<string, unknown>()) },
+      permissions: { request: vi.fn(() => Promise.resolve(true)) },
       alarms: { onAlarm: { addListener: vi.fn() } },
       commands: { onCommand: { addListener: vi.fn() } },
     },

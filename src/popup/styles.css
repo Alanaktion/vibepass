@@ -121,3 +121,21 @@ button:disabled {
 .name {
   font-weight: 600;
 }
+
+button.link {
+  border: none;
+  padding: 4px 0;
+  margin-top: 12px;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.footer {
+  align-items: center;
+  margin-top: 12px;
+  font-size: 0.9em;
+}
+
+.footer button.link {
+  margin-top: 0;
+}

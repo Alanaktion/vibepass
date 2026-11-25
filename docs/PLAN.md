@@ -54,6 +54,18 @@ the **autofill page corpus** and the **server compatibility suite** (see the end
 **Goal:** prove we can authenticate, sync, and decrypt a real vault from self-hosted Bitwarden and
 Vaultwarden, and show it in a read-only popup.
 
+> **Status (2026-11-25): done on Vaultwarden; self-hosted Bitwarden still to verify.**
+>
+> - SDK checked and adopted, repo licensed GPL-3.0 ([ADR 0001](adr/0001-crypto-sdk.md)).
+> - Crypto, API client, login, offline unlock, session restore, encrypted cache, and a read-only
+>   popup are in. Tests decrypt vaults written by the official web vault (PBKDF2 and Argon2id).
+> - Live check: the built extension in a real Chromium MV3 service worker logged in to a local
+>   Vaultwarden 1.37.5, synced, searched, locked, rejected a wrong password, unlocked, survived a
+>   forced worker restart, and logged out. Login plus sync took about 0.8 s; unlock 0.3 to 0.8 s.
+> - Not yet verified: self-hosted Bitwarden (its image could not be pulled in the build
+>   environment), Firefox in a live browser, and two-step login (shows a clear error for now).
+>   These carry into Phase 1, along with running the local-server check in CI.
+
 ### Decisions to make first
 
 **Decided (2026-11-24): reuse Bitwarden's SDK for crypto.** The goal is a 1Password-like

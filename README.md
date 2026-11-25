@@ -4,8 +4,9 @@ A fast, keyboard-first browser extension for **self-hosted Bitwarden and Vaultwa
 It uses your existing server and vault, with a 1Password-style experience: quick find, inline
 autofill, and a calm item view. Nothing to migrate.
 
-> **Status: scaffold.** The project structure, build, and message passing work. Crypto and the
-> server API are typed stubs. Do not point this at a real vault yet.
+> **Status: Phase 0 (read-only).** Vibepass can log in to a self-hosted server, sync, decrypt,
+> and search your vault, read-only. It never writes to the vault. Autofill, item details, and
+> two-step login come in Phase 1. Test it with a throwaway account first.
 
 ## Requirements
 
@@ -57,8 +58,8 @@ src/
     handlers.ts   One handler per message type
   popup/        Preact UI: setup, unlock, and quick find in one surface
   content/      Content script: form detection and (later) the inline autofill menu
-  api/          Bitwarden server API client and wire types (stubs)
-  crypto/       KDF, key stretching, EncString (stubs)
+  api/          Bitwarden server API client: prelogin, token login and refresh, sync
+  crypto/       Thin wrapper over Bitwarden's SDK (WASM): KDF, user key, EncString
   storage/      Settings (storage.local), session key (storage.session), vault cache (IndexedDB)
   search/       In-memory search index (substring placeholder; MiniSearch planned)
   vault/        In-memory vault state and decrypted view models
@@ -91,14 +92,39 @@ browser only where it must: Chrome uses `background.service_worker`, Firefox use
 - `no-console` is an error in `src/`; use `src/shared/log.ts`, and never log vault data.
 - The background router rejects messages from other extensions.
 - Host access to the server is requested at runtime via `optional_host_permissions`.
-- The extension CSP allows `'wasm-unsafe-eval'` for the planned Argon2id WASM build, and
-  nothing else beyond `'self'`.
+- The extension CSP allows `'wasm-unsafe-eval'` for Bitwarden's SDK (WASM), and nothing else
+  beyond `'self'`.
+- The refresh token is stored encrypted with the user key, so it is useless while locked.
+  Unlock works offline from the encrypted IndexedDB cache; sync then runs in the background.
+
+### Crypto
+
+Crypto comes from Bitwarden's official SDK, `@bitwarden/sdk-internal` (GPL-3.0), pinned to an
+exact version. `src/crypto/sdk.ts` loads its `.wasm` (copied to `dist/<browser>/sdk/` by the
+build) on first use, because MV3 service workers can't use dynamic imports or top-level await.
+Only its stateless `PureCrypto` API is used. See
+[docs/adr/0001-crypto-sdk.md](docs/adr/0001-crypto-sdk.md).
+
+Tests check the wrapper against vaults written by the official Bitwarden web vault
+(`tests/fixtures/official-*.json`, throwaway accounts on a local Vaultwarden).
+
+### Local test server
+
+```sh
+docker run -d --name vw -e SIGNUPS_ALLOWED=true -e I_REALLY_WANT_VOLATILE_STORAGE=true \
+  -e DOMAIN=https://localhost:8222 -v "$PWD/ssl:/ssl" \
+  -e ROCKET_TLS='{certs="/ssl/cert.pem",key="/ssl/key.pem"}' -p 8222:80 vaultwarden/server
+node scripts/dev/register-account.mjs https://localhost:8222 me@example.test 'a long test password' argon2id
+```
+
+The web vault needs HTTPS, so create a self-signed `ssl/cert.pem` and `ssl/key.pem` for
+`localhost` first, and run Node with `NODE_EXTRA_CA_CERTS=ssl/cert.pem`.
 
 ## Roadmap
 
-See [docs/PLAN.md](docs/PLAN.md) for the phased build plan. Next is **Phase 0 (spike)**: prelogin, KDF, token login, sync, and decrypt,
-verified against test vectors from the official clients, with a read-only popup and search.
+See [docs/PLAN.md](docs/PLAN.md) for the phased build plan. Phase 0 is done; next is
+**Phase 1 (MVP)**: quick find, item view, TOTP, autofill, auto-lock, and two-step login.
 
 ## License
 
-Not chosen yet.
+GPL-3.0. See [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

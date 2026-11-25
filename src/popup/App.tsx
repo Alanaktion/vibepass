@@ -28,10 +28,10 @@ export function App() {
 
   switch (status.state) {
     case 'logged-out':
-      return <SetupScreen />;
+      return <SetupScreen onStatus={setStatus} />;
     case 'locked':
       return <LockScreen status={status} onStatus={setStatus} />;
     case 'unlocked':
-      return <QuickFind onLock={setStatus} />;
+      return <QuickFind status={status} onStatus={setStatus} />;
   }
 }

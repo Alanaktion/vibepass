@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { createHandlers } from '../src/background/handlers';
 import { createRouter } from '../src/background/router';
+import { KdfType } from '../src/crypto';
 import { createSearchIndex } from '../src/search';
 import { createMessage } from '../src/shared/messages';
 import { VaultState } from '../src/vault/state';
 import { CipherType } from '../src/vault/types';
+import { createTestService } from './helpers';
 
 const EXT_ID = 'test-extension-id';
 const sender = { id: EXT_ID };
@@ -12,8 +14,9 @@ const sender = { id: EXT_ID };
 function setup() {
   const vault = new VaultState();
   const search = createSearchIndex();
-  const route = createRouter(createHandlers({ vault, search }), EXT_ID);
-  return { vault, search, route };
+  const { service, deps } = createTestService(vault, search);
+  const route = createRouter(createHandlers({ vault, search, service }), EXT_ID);
+  return { vault, search, route, deps };
 }
 
 describe('background router', () => {
@@ -35,14 +38,14 @@ describe('background router', () => {
     const { route } = setup();
     await expect(route(createMessage('vault:status', undefined), sender)).resolves.toEqual({
       ok: true,
-      data: { state: 'logged-out', serverUrl: null, email: null, lastSync: null },
+      data: { state: 'logged-out', serverUrl: null, email: null, lastSync: null, itemCount: 0 },
     });
   });
 
   it('wraps handler errors in an envelope', async () => {
     const { route } = setup();
     const result = await route(createMessage('vault:unlock', { masterPassword: 'x' }), sender);
-    expect(result).toEqual({ ok: false, error: 'Not implemented yet: vault:unlock' });
+    expect(result).toEqual({ ok: false, error: 'Log in first' });
   });
 
   it('returns no search results while locked, and clears data on lock', async () => {
@@ -63,8 +66,16 @@ describe('background router', () => {
       data: [],
     });
 
-    vault.setAccount('https://vault.example.com', 'me@example.com');
-    vault.unlock({ encKey: new Uint8Array(32), macKey: new Uint8Array(32) }, [item]);
+    vault.setAccount({
+      serverUrl: 'https://vault.example.com',
+      email: 'me@example.com',
+      userId: 'u1',
+      salt: 'me@example.com',
+      kdf: { type: KdfType.PBKDF2_SHA256, iterations: 600_000 },
+      protectedUserKey: '2.x|y|z',
+      refreshToken: null,
+    });
+    vault.unlock(new Uint8Array(64), { items: [item], folders: [], skipped: 0 });
     await expect(route(createMessage('vault:search', { query: 'ex' }), sender)).resolves.toEqual({
       ok: true,
       data: [item],
