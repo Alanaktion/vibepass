@@ -14,6 +14,7 @@ import { IconButton } from './IconButton';
 interface Props {
   onBack: () => void;
   onSettings: (settings: Settings) => void;
+  onOpen: (view: 'folders' | 'trash') => void;
 }
 
 const minutes = (m: number) =>
@@ -21,7 +22,7 @@ const minutes = (m: number) =>
 const seconds = (s: number) =>
   s === 0 ? 'Never' : s < 60 ? `${String(s)} s` : `${String(s / 60)} min`;
 
-export function SettingsView({ onBack, onSettings }: Props) {
+export function SettingsView({ onBack, onSettings, onOpen }: Props) {
   const ctx = usePopup();
   const settings = ctx.settings;
   const [builtIn, setBuiltIn] = useState<BuiltInState | null>(null);
@@ -32,7 +33,7 @@ export function SettingsView({ onBack, onSettings }: Props) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      if (e.key === 'Escape' && !document.querySelector('.dialog')) {
         e.preventDefault();
         onBack();
       }
@@ -137,6 +138,64 @@ export function SettingsView({ onBack, onSettings }: Props) {
             <p class="muted small">Your administrator controls this setting.</p>
           )}
           {builtIn === 'off' && <p class="muted small">Already off in your browser settings.</p>}
+          <label class="check">
+            <input
+              type="checkbox"
+              checked={settings.allowEdits}
+              onChange={(e) => {
+                const on = e.currentTarget.checked;
+                if (!on) {
+                  save({ allowEdits: false });
+                  return;
+                }
+                void ctx
+                  .confirm(
+                    'Editing is new in Vibepass. It is tested against Bitwarden’s own code, but keep a backup of your vault (export it from the web vault) until you trust it.',
+                    'Turn on editing',
+                  )
+                  .then((ok) => {
+                    if (ok) save({ allowEdits: true });
+                  });
+              }}
+            />
+            Let Vibepass edit my vault (new)
+          </label>
+          <p class="muted small">
+            Add and edit items, save logins from web pages, and organize folders and the trash.
+          </p>
+          <label class="check">
+            <input
+              type="checkbox"
+              checked={settings.offerToSave}
+              disabled={!settings.allowEdits}
+              onChange={(e) => {
+                save({ offerToSave: e.currentTarget.checked });
+              }}
+            />
+            Offer to save new logins and changed passwords
+          </label>
+          {settings.allowEdits && (
+            <div class="row">
+              <button
+                type="button"
+                class="ghost"
+                onClick={() => {
+                  onOpen('folders');
+                }}
+              >
+                Folders
+              </button>
+              <button
+                type="button"
+                class="ghost"
+                onClick={() => {
+                  onOpen('trash');
+                }}
+              >
+                Trash
+              </button>
+            </div>
+          )}
           <label class="check">
             <input
               type="checkbox"

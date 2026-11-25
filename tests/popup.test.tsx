@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/preact';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/preact';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import browser from 'webextension-polyfill';
 import { App } from '../src/popup/App';
@@ -13,6 +13,7 @@ const base: VaultStatus = {
   lastSync: '2026-11-25T00:00:00.000Z',
   itemCount: 2,
   syncError: null,
+  version: 1,
 };
 
 const hit = (id: string, name: string, siteMatch: boolean): SearchHit => ({
@@ -58,6 +59,9 @@ const detail: CipherDetail = {
   attachments: [],
   hasTotp: false,
   reprompt: false,
+  folderId: null,
+  canEdit: true,
+  deletedDate: null,
   revisionDate: '2026-11-25T00:00:00.000Z',
 };
 
@@ -322,5 +326,137 @@ describe('popup', () => {
       });
     });
     expect(await screen.findByLabelText('Search vault')).toBeTruthy();
+  });
+
+  describe('editing', () => {
+    const editing = { ...DEFAULT_SETTINGS, allowEdits: true };
+    const editable = {
+      id: 'a',
+      revisionDate: '2026-11-25T00:00:00.000Z',
+      organization: null,
+      draft: {
+        type: CipherType.Login,
+        name: 'Example Login',
+        notes: 'hello notes',
+        favorite: false,
+        folderId: null,
+        reprompt: false,
+        login: {
+          username: 'alice',
+          password: 'hunter2',
+          totp: '',
+          uris: [{ uri: 'https://login.example.com', match: null }],
+        },
+        fields: [],
+      },
+    };
+    const writeBackend = (overrides: Partial<Record<MessageType, Responder>> = {}) =>
+      backend(base, {
+        'settings:get': () => ({ ok: true, data: editing }),
+        'vault:edit': () => ({ ok: true, data: structuredClone(editable) }),
+        'vault:folders': () => ({ ok: true, data: [{ id: 'f1', name: 'Work' }] }),
+        'vault:save': () => ({ ok: true, data: { id: 'a' } }),
+        ...overrides,
+      });
+
+    it('hides editing while it is turned off', async () => {
+      backend(base);
+      render(<App />);
+      fireEvent.click(await screen.findByText('Example Login'));
+      await screen.findByText('alice');
+      expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'New login' })).toBeNull();
+    });
+
+    it('edits an item and saves it with the revision it started from', async () => {
+      const calls = writeBackend();
+      render(<App />);
+      fireEvent.click(await screen.findByText('Example Login'));
+      fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+      const name = await screen.findByLabelText('Name');
+      fireEvent.input(name, { target: { value: 'Renamed' } });
+      fireEvent.keyDown(document, { key: 's', ctrlKey: true, metaKey: true });
+      await waitFor(() => {
+        expect(calls.find((c) => c.type === 'vault:save')?.payload).toMatchObject({
+          id: 'a',
+          revisionDate: editable.revisionDate,
+          draft: { name: 'Renamed', login: { password: 'hunter2' } },
+        });
+      });
+      expect(await screen.findByText('Saved')).toBeTruthy();
+      // Back on the item view.
+      expect(await screen.findByRole('button', { name: 'Edit' })).toBeTruthy();
+    });
+
+    it('asks before saving over a change from another device', async () => {
+      const calls = writeBackend({
+        'vault:save': (payload) =>
+          (payload as { overwrite?: boolean }).overwrite
+            ? { ok: true, data: { id: 'a' } }
+            : { ok: false, error: 'Changed elsewhere', code: 'conflict' },
+      });
+      render(<App />);
+      fireEvent.click(await screen.findByText('Example Login'));
+      fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+      await screen.findByLabelText('Name');
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      fireEvent.click(await screen.findByText('Save mine'));
+      await waitFor(() => {
+        expect(calls.filter((c) => c.type === 'vault:save').at(-1)?.payload).toMatchObject({
+          overwrite: true,
+        });
+      });
+    });
+
+    it('rejects an invalid one-time password key before saving', async () => {
+      const calls = writeBackend();
+      render(<App />);
+      fireEvent.click(await screen.findByText('Example Login'));
+      fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+      fireEvent.input(await screen.findByLabelText('One-time password key'), {
+        target: { value: 'not base32 !!' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      expect(await screen.findByText(/one-time password key isn’t valid/)).toBeTruthy();
+      expect(calls.some((c) => c.type === 'vault:save')).toBe(false);
+    });
+
+    it('starts a new login for the current site and fills in a generated password', async () => {
+      const calls = writeBackend({
+        'generator:generate': () => ({ ok: true, data: { password: 'Gen3rated-Pass' } }),
+        'vault:save': () => ({ ok: true, data: { id: 'new' } }),
+      });
+      render(<App />);
+      fireEvent.click(await screen.findByRole('button', { name: 'New login' }));
+      expect((await screen.findByLabelText<HTMLInputElement>('Name')).value).toBe(
+        'login.example.com',
+      );
+      expect(screen.getByLabelText<HTMLInputElement>('Website 1').value).toBe(
+        'https://login.example.com',
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Generate a password' }));
+      await waitFor(() => {
+        expect(screen.getByLabelText<HTMLInputElement>('Password').value).toBe('Gen3rated-Pass');
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => {
+        expect(calls.find((c) => c.type === 'vault:save')?.payload).toMatchObject({
+          id: null,
+          draft: { login: { password: 'Gen3rated-Pass' } },
+        });
+      });
+    });
+
+    it('moves an item to the trash after confirming', async () => {
+      const calls = writeBackend({ 'vault:trash-item': () => ({ ok: true, data: undefined }) });
+      render(<App />);
+      fireEvent.click(await screen.findByText('Example Login'));
+      fireEvent.click(await screen.findByRole('button', { name: /Move to trash/ }));
+      fireEvent.click(within(await screen.findByRole('alertdialog')).getByText('Move to trash'));
+      await waitFor(() => {
+        expect(calls.find((c) => c.type === 'vault:trash-item')?.payload).toEqual({ id: 'a' });
+      });
+      expect(await screen.findByLabelText('Search vault')).toBeTruthy();
+    });
   });
 });

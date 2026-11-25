@@ -6,9 +6,18 @@
  * for the one item the user acted on.
  */
 import type { LoginChallenge } from '../api/types';
+import type { StoredGeneratorOptions } from '../storage/generator';
 import type { Settings } from '../storage/settings';
 import type { TotpCode } from '../vault/totp';
-import type { CipherDetail, SearchHit } from '../vault/types';
+import type {
+  CipherDetail,
+  EditableItem,
+  FolderSummary,
+  ItemDraft,
+  PasswordHistoryEntry,
+  SearchHit,
+  TrashItem,
+} from '../vault/types';
 import type { ErrorCode } from './errors';
 
 export type LockState = 'logged-out' | 'locked' | 'unlocked';
@@ -22,6 +31,8 @@ export interface VaultStatus {
   itemCount: number;
   /** Why the last background sync failed, if it did. Cleared by the next good sync. */
   syncError: string | null;
+  /** Changes whenever the vault's contents change (a sync or a save), so views reload. */
+  version: number;
 }
 
 export interface LoginRequest {
@@ -56,7 +67,57 @@ export interface InlineMenuItem {
 
 /** What the inline menu on a page's login fields should show. */
 export type InlineMenuState =
-  { state: 'off' } | { state: 'locked' } | { state: 'unlocked'; items: InlineMenuItem[] };
+  | { state: 'off' }
+  | { state: 'locked' }
+  | {
+      state: 'unlocked';
+      items: InlineMenuItem[];
+      /** Offer a generated password on new-password fields. */
+      canGenerate?: boolean;
+      /** Offer to save submitted logins (editing and saving are turned on). */
+      offerToSave?: boolean;
+    };
+
+/** Saving from the editor. See VaultService.saveItem for the conflict rules. */
+export interface SaveItemRequest {
+  /** null creates a new item. */
+  id: string | null;
+  draft: ItemDraft;
+  /** The revision the editor started from. */
+  revisionDate?: string;
+  /** Save over a newer copy from another device. */
+  overwrite?: boolean;
+}
+
+/**
+ * What a page's submitted login means for the vault, shown as a banner on the page. Names and
+ * usernames only: the password stays in the worker until the user answers.
+ */
+export type SavePrompt =
+  | { kind: 'save'; host: string; username: string | null; suggestedName: string }
+  | {
+      kind: 'update';
+      host: string;
+      username: string | null;
+      /** Logins for the site this could update, best first. */
+      items: { id: string; name: string; username: string | null }[];
+    };
+
+/** Credentials a page submitted, as the content script read them from the form. */
+export interface SubmittedLogin {
+  username: string | null;
+  /** The current password (sign in), if the form had one. */
+  password: string | null;
+  /** A new password (sign up or change password), if the form had one. */
+  newPassword: string | null;
+}
+
+export type SaveAnswer =
+  | { action: 'save'; name: string }
+  | { action: 'update'; id: string }
+  | { action: 'dismiss' }
+  /** Don't offer again for this site (until the browser restarts). */
+  | { action: 'never' };
 
 /** Map of message type -> { request payload, response payload }. */
 export interface MessageMap {
@@ -76,6 +137,27 @@ export interface MessageMap {
     request: { id: string; attachmentId: string } & RepromptFields;
     response: { fileName: string; base64: string };
   };
+  'vault:edit': { request: { id: string } & RepromptFields; response: EditableItem };
+  'vault:save': { request: SaveItemRequest; response: { id: string } };
+  'vault:organize': {
+    request: { id: string; favorite?: boolean; folderId?: string | null };
+    response: undefined;
+  };
+  'vault:trash-item': { request: { id: string }; response: undefined };
+  'vault:restore': { request: { id: string }; response: undefined };
+  'vault:delete-forever': { request: { id: string }; response: undefined };
+  'vault:trash': { request: undefined; response: TrashItem[] };
+  'vault:folders': { request: undefined; response: FolderSummary[] };
+  'folder:create': { request: { name: string }; response: FolderSummary };
+  'folder:rename': { request: { id: string; name: string }; response: undefined };
+  'folder:delete': { request: { id: string }; response: undefined };
+  'generator:options': { request: undefined; response: StoredGeneratorOptions };
+  'generator:generate': {
+    request: { options?: StoredGeneratorOptions };
+    response: { password: string };
+  };
+  'generator:history': { request: undefined; response: PasswordHistoryEntry[] };
+  'generator:clear-history': { request: undefined; response: undefined };
   'autofill:fill': {
     request: { tabId: number; id: string; force?: boolean } & RepromptFields;
     response: FillResult;
@@ -84,6 +166,17 @@ export interface MessageMap {
   'autofill:menu': { request: undefined; response: InlineMenuState };
   'autofill:menu-fill': { request: { id: string }; response: FillResult };
   'autofill:open-popup': { request: undefined; response: undefined };
+  /** A login form was submitted on the page; answers with a banner to show, if any. */
+  'autofill:submitted': { request: SubmittedLogin; response: SavePrompt | null };
+  /** A banner the page should show after it loaded (the form submit navigated). */
+  'autofill:pending-prompt': {
+    request: undefined;
+    /** `offer`: send submitted logins at all (unlocked, with editing and saving turned on). */
+    response: { prompt: SavePrompt | null; offer: boolean };
+  };
+  'autofill:save-answer': { request: SaveAnswer; response: { message: string } };
+  /** Suggest a strong password for a new-password field, following the site's rules. */
+  'autofill:generate': { request: { rules: string | null }; response: { password: string } };
   'clipboard:copied': { request: undefined; response: undefined };
   'settings:get': { request: undefined; response: Settings };
   'settings:set': { request: Partial<Settings>; response: Settings };
@@ -118,11 +211,30 @@ const MESSAGE_TYPES: readonly MessageType[] = [
   'vault:reveal',
   'vault:totp',
   'vault:attachment',
+  'vault:edit',
+  'vault:save',
+  'vault:organize',
+  'vault:trash-item',
+  'vault:restore',
+  'vault:delete-forever',
+  'vault:trash',
+  'vault:folders',
+  'folder:create',
+  'folder:rename',
+  'folder:delete',
+  'generator:options',
+  'generator:generate',
+  'generator:history',
+  'generator:clear-history',
   'autofill:fill',
   'autofill:page-ready',
   'autofill:menu',
   'autofill:menu-fill',
   'autofill:open-popup',
+  'autofill:submitted',
+  'autofill:pending-prompt',
+  'autofill:save-answer',
+  'autofill:generate',
   'clipboard:copied',
   'settings:get',
   'settings:set',
@@ -137,6 +249,10 @@ const CONTENT_SCRIPT_ALLOWED: ReadonlySet<MessageType> = new Set<MessageType>([
   'autofill:menu',
   'autofill:menu-fill',
   'autofill:open-popup',
+  'autofill:submitted',
+  'autofill:pending-prompt',
+  'autofill:save-answer',
+  'autofill:generate',
 ]);
 
 /** Messages only the popup (an extension page) may send; content scripts are refused. */

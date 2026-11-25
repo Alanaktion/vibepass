@@ -6,7 +6,7 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import tseslint from 'typescript-eslint';
 
 export default defineConfig(
-  // live-check.mjs and inline-menu-check.mjs drive Playwright, which isn't a project dependency.
+  // The live checks drive Playwright, which isn't a project dependency.
   {
     ignores: [
       'dist/',
@@ -14,6 +14,7 @@ export default defineConfig(
       'node_modules/',
       'scripts/dev/live-check.mjs',
       'scripts/dev/inline-menu-check.mjs',
+      'scripts/dev/write-check.mjs',
     ],
   },
   js.configs.recommended,

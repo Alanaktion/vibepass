@@ -23,7 +23,11 @@ export type ErrorCode =
   | 'reprompt-required'
   /** The item is not saved for the page; the user can confirm and fill anyway. */
   | 'fill-mismatch'
-  | 'locked';
+  | 'locked'
+  /** The item changed on the server since the last sync; saving would overwrite that. */
+  | 'conflict'
+  /** Editing is turned off in settings. */
+  | 'writes-off';
 
 export function isCodedError(value: unknown, code?: ErrorCode): value is CodedError {
   return value instanceof CodedError && (code === undefined || value.code === code);

@@ -3,6 +3,9 @@ import type { ErrorCode } from '../shared/errors';
 import {
   TwoFactorProvider,
   type AttachmentResponse,
+  type CipherResponse,
+  type FolderRequest,
+  type FolderResponse,
   type PasswordTokenRequest,
   type PreloginResponse,
   type ServerConfig,
@@ -52,6 +55,16 @@ export class NewDeviceVerificationError extends ApiError {
   constructor() {
     super('Enter the verification code Bitwarden emailed you', 400);
     this.name = 'NewDeviceVerificationError';
+  }
+}
+
+/** The server refused a save because another client changed the item since our last sync. */
+export class ConflictError extends ApiError {
+  readonly code: ErrorCode = 'conflict';
+
+  constructor() {
+    super('This item was changed on another device since your last sync', 400);
+    this.name = 'ConflictError';
   }
 }
 
@@ -209,6 +222,72 @@ export class ApiClient {
     });
   }
 
+  // --- Writes ------------------------------------------------------------------------------
+  // Every write returns the server's new copy (or nothing), and the caller updates its state
+  // from that, so a failed request never leaves a half-applied change behind.
+
+  /** Create a personal item. */
+  async createCipher(body: Record<string, unknown>): Promise<CipherResponse> {
+    return this.write<CipherResponse>('POST', '/ciphers', body);
+  }
+
+  /** Replace an item. The server refuses it if `lastKnownRevisionDate` is stale. */
+  async updateCipher(id: string, body: Record<string, unknown>): Promise<CipherResponse> {
+    return this.write<CipherResponse>('PUT', `/ciphers/${encodeURIComponent(id)}`, body);
+  }
+
+  /** Change only the folder and favorite flag, without re-encrypting the item. */
+  async updateCipherPartial(
+    id: string,
+    body: { folderId: string | null; favorite: boolean },
+  ): Promise<CipherResponse> {
+    return this.write<CipherResponse>('PUT', `/ciphers/${encodeURIComponent(id)}/partial`, body);
+  }
+
+  /** Move an item to the trash. */
+  async softDeleteCipher(id: string): Promise<void> {
+    await this.writeEmpty('PUT', `/ciphers/${encodeURIComponent(id)}/delete`);
+  }
+
+  /** Take an item out of the trash. */
+  async restoreCipher(id: string): Promise<CipherResponse> {
+    return this.write<CipherResponse>('PUT', `/ciphers/${encodeURIComponent(id)}/restore`);
+  }
+
+  /** Delete an item for good. */
+  async deleteCipher(id: string): Promise<void> {
+    await this.writeEmpty('DELETE', `/ciphers/${encodeURIComponent(id)}`);
+  }
+
+  async createFolder(body: FolderRequest): Promise<FolderResponse> {
+    return this.write<FolderResponse>('POST', '/folders', body);
+  }
+
+  async updateFolder(id: string, body: FolderRequest): Promise<FolderResponse> {
+    return this.write<FolderResponse>('PUT', `/folders/${encodeURIComponent(id)}`, body);
+  }
+
+  /** Delete a folder. Its items stay, with no folder. */
+  async deleteFolder(id: string): Promise<void> {
+    await this.writeEmpty('DELETE', `/folders/${encodeURIComponent(id)}`);
+  }
+
+  private write<T>(method: string, path: string, body?: unknown): Promise<T> {
+    return this.json<T>(`${this.apiUrl}${path}`, this.writeInit(method, body));
+  }
+
+  private async writeEmpty(method: string, path: string, body?: unknown): Promise<void> {
+    await this.request(`${this.apiUrl}${path}`, this.writeInit(method, body));
+  }
+
+  private writeInit(method: string, body: unknown): RequestInit {
+    return {
+      method,
+      headers: { ...this.authHeaders(), 'Content-Type': 'application/json' },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    };
+  }
+
   private authHeaders(): Record<string, string> {
     if (!this.accessToken) throw new ApiError('Not logged in', 401);
     return { Authorization: `Bearer ${this.accessToken}` };
@@ -302,6 +381,9 @@ function errorFrom(status: number, body: unknown): ApiError {
     (data.error === 'invalid_grant' && !message)
   ) {
     return new ApiError('Email or master password is incorrect', status);
+  }
+  if (/client copy of this (cipher|item) is out of date/i.test(message ?? '')) {
+    return new ConflictError();
   }
   if (status === 401) return new ApiError('Your session expired. Log in again.', status);
   return new ApiError(message ?? `Server error (${String(status)})`, status);

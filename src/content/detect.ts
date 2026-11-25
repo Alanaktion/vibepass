@@ -193,3 +193,85 @@ export function fillInput(input: HTMLInputElement, value: string): void {
   input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
   input.dispatchEvent(new Event('change', { bubbles: true }));
 }
+
+/**
+ * A password field for a new password: sign up, or the new and confirm fields of a password
+ * change. The page's autocomplete says so, or the field sits with another password field in a
+ * form that has no current-password field.
+ */
+export function isNewPasswordField(input: HTMLInputElement): boolean {
+  if (input.type !== 'password') return false;
+  const ac = autocomplete(input);
+  if (ac.includes('new-password')) return true;
+  if (ac.includes('current-password')) return false;
+  const scope: ParentNode = input.form ?? input.ownerDocument;
+  const passwords = Array.from(scope.querySelectorAll('input[type="password"]')).filter(
+    (p): p is HTMLInputElement => p instanceof HTMLInputElement && isUsable(p),
+  );
+  if (passwords.length < 2) return false;
+  if (passwords.some((p) => autocomplete(p).includes('current-password'))) return false;
+  // Two fields: sign up (password and confirm). Three: current, new, confirm.
+  return passwords.length === 2 || passwords.indexOf(input) > 0;
+}
+
+/** The password fields that should get the same new password as `input` (it and its confirm). */
+export function newPasswordFields(input: HTMLInputElement): HTMLInputElement[] {
+  const scope: ParentNode = input.form ?? input.ownerDocument;
+  const passwords = Array.from(scope.querySelectorAll('input[type="password"]')).filter(
+    (p): p is HTMLInputElement => p instanceof HTMLInputElement && isUsable(p),
+  );
+  const others = passwords.filter((p) => p !== input && isNewPasswordField(p));
+  return [input, ...others.filter((p) => p.value === '' || p.value === input.value)];
+}
+
+export interface SubmittedFields {
+  username: string | null;
+  password: string | null;
+  newPassword: string | null;
+}
+
+/**
+ * Read what a login, sign-up, or password-change form is submitting, at the moment of submit.
+ * Returns null when there's no password in it.
+ */
+export function readSubmitted(scope: HTMLFormElement | Document): SubmittedFields | null {
+  const inputs = (scope instanceof HTMLFormElement ? Array.from(scope.elements) : allInputs(scope))
+    .filter((el): el is HTMLInputElement => el instanceof HTMLInputElement)
+    .filter(isUsable);
+  const passwords = inputs.filter((i) => i.type === 'password' && i.value !== '');
+  if (passwords.length === 0) return null;
+
+  const byAc = (hint: string) => passwords.find((p) => autocomplete(p).includes(hint)) ?? null;
+  let current = byAc('current-password');
+  let fresh = byAc('new-password');
+  if (!current && !fresh) {
+    const [first, second, third] = passwords;
+    if (passwords.length === 1) current = first ?? null;
+    else if (passwords.length === 2 && first && second) {
+      // Same value twice: sign up with a confirm field. Different: old and new password.
+      if (first.value === second.value) fresh = first;
+      else [current, fresh] = [first, second];
+    } else if (first && second && third) {
+      [current, fresh] = [first, second.value === third.value ? second : third];
+    }
+  } else if (!fresh && passwords.length >= 2) {
+    fresh = passwords.find((p) => p !== current) ?? null;
+  }
+
+  const firstPassword = passwords[0];
+  const before = firstPassword ? inputs.slice(0, inputs.indexOf(firstPassword)) : inputs;
+  let username: HTMLInputElement | null = null;
+  let best = 0;
+  for (const candidate of before.filter((i) => isUsernameCandidate(i) && i.value.trim())) {
+    const score = usernameScore(candidate);
+    if (score >= best) {
+      best = score;
+      username = candidate;
+    }
+  }
+  return {
+    username: username?.value.trim() ?? null,
+    password: current?.value ?? null,
+    newPassword: fresh && fresh !== current ? fresh.value : null,
+  };
+}

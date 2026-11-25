@@ -5,14 +5,26 @@ import { sendMessage } from '../shared/messaging';
 import type { Settings } from '../storage/settings';
 import { Ctx, type PopupContext } from './context';
 import { Dialog, Toast, type DialogRequest } from './components/Dialogs';
+import { EditView } from './components/EditView';
+import { FoldersView } from './components/FoldersView';
+import { GeneratorView } from './components/GeneratorView';
 import { ItemView } from './components/ItemView';
 import { LockScreen } from './components/LockScreen';
 import { QuickFind } from './components/QuickFind';
 import { SettingsView } from './components/SettingsView';
 import { SetupScreen } from './components/SetupScreen';
+import { TrashView } from './components/TrashView';
+import { CipherType } from '../vault/types';
 import { activeTab, type ActiveTab } from './lib';
 
-type View = { kind: 'list' } | { kind: 'item'; id: string } | { kind: 'settings' };
+type View =
+  | { kind: 'list' }
+  | { kind: 'item'; id: string }
+  | { kind: 'settings' }
+  | { kind: 'edit'; id: string | null; type: CipherType.Login | CipherType.SecureNote }
+  | { kind: 'generator' }
+  | { kind: 'folders' }
+  | { kind: 'trash' };
 
 /** One surface: setup, unlock, quick find, item, or settings, depending on vault state. */
 export function App() {
@@ -86,6 +98,15 @@ export function App() {
   const back = useCallback(() => {
     setView({ kind: 'list' });
   }, []);
+  const toSettings = useCallback(() => {
+    setView({ kind: 'settings' });
+  }, []);
+  const open = useCallback((id: string) => {
+    setView({ kind: 'item', id });
+  }, []);
+  const edit = useCallback((id: string) => {
+    setView({ kind: 'edit', id, type: CipherType.Login });
+  }, []);
 
   if (error)
     return (
@@ -106,23 +127,59 @@ export function App() {
       screen = <LockScreen status={status} onStatus={setStatus} />;
       break;
     case 'unlocked':
-      screen =
-        view.kind === 'item' ? (
-          <ItemView id={view.id} onBack={back} />
-        ) : view.kind === 'settings' ? (
-          <SettingsView onBack={back} onSettings={setSettings} />
-        ) : (
-          <QuickFind
-            query={query}
-            onQuery={setQuery}
-            onOpen={(id) => {
-              setView({ kind: 'item', id });
-            }}
-            onSettings={() => {
-              setView({ kind: 'settings' });
-            }}
-          />
-        );
+      switch (view.kind) {
+        case 'item':
+          screen = <ItemView id={view.id} onBack={back} onEdit={edit} />;
+          break;
+        case 'edit':
+          screen = (
+            <EditView
+              id={view.id}
+              type={view.type}
+              onSaved={open}
+              onCancel={() => {
+                if (view.id) open(view.id);
+                else back();
+              }}
+            />
+          );
+          break;
+        case 'settings':
+          screen = (
+            <SettingsView
+              onBack={back}
+              onSettings={setSettings}
+              onOpen={(kind) => {
+                setView({ kind });
+              }}
+            />
+          );
+          break;
+        case 'generator':
+          screen = <GeneratorView onBack={back} />;
+          break;
+        case 'folders':
+          screen = <FoldersView onBack={toSettings} />;
+          break;
+        case 'trash':
+          screen = <TrashView onBack={toSettings} onOpen={open} />;
+          break;
+        case 'list':
+          screen = (
+            <QuickFind
+              query={query}
+              onQuery={setQuery}
+              onOpen={open}
+              onSettings={toSettings}
+              onNew={(type) => {
+                setView({ kind: 'edit', id: null, type });
+              }}
+              onGenerator={() => {
+                setView({ kind: 'generator' });
+              }}
+            />
+          );
+      }
   }
 
   return (

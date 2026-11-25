@@ -466,3 +466,164 @@ select {
   white-space: nowrap;
   box-shadow: 0 4px 16px rgb(0 0 0 / 20%);
 }
+
+/* Editing (Phase 2) */
+
+textarea {
+  font: inherit;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: inherit;
+  resize: vertical;
+}
+
+.mono {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+.form {
+  margin-top: 12px;
+}
+
+.form input:not([type='checkbox'], [type='radio'], [type='range']),
+.form textarea,
+.form select {
+  min-width: 0;
+}
+
+.labelled {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-weight: 500;
+}
+
+.input-row {
+  align-items: center;
+  gap: 4px;
+}
+
+.input-row input {
+  min-width: 0;
+}
+
+fieldset {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin: 0;
+  padding: 6px 10px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+legend {
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  padding: 0 4px;
+}
+
+.custom-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.custom-field + .custom-field {
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+}
+
+button.add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  padding: 4px 6px;
+  color: var(--accent);
+}
+
+button.danger {
+  color: var(--error);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.organize {
+  align-items: flex-end;
+  margin-top: 14px;
+}
+
+label.inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  font-weight: 400;
+}
+
+.banner.info {
+  align-items: center;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.row.center {
+  justify-content: center;
+}
+
+.empty .row {
+  margin-top: 8px;
+}
+
+.generated {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.generated output {
+  font-size: 1.05rem;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.segmented {
+  display: flex;
+  gap: 16px;
+}
+
+input.short {
+  width: 4em;
+}
+
+input[type='range'] {
+  padding: 0;
+  accent-color: var(--accent);
+}
+
+.history {
+  margin-top: 16px;
+}
+
+.history .link {
+  margin: 0;
+  padding: 8px 12px;
+}
+
+.stack-tight {
+  margin-top: 12px;
+}
+
+button.icon-button[aria-pressed='true'] svg {
+  color: #f59f00;
+  fill: currentColor;
+}

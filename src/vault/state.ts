@@ -2,7 +2,13 @@ import type { CipherResponse } from '../api/types';
 import type { LockState, VaultStatus } from '../shared/messages';
 import type { Account } from '../storage/account';
 import type { SymmetricKey } from '../crypto/types';
-import type { CipherSummary, CollectionSummary, FolderSummary, OrganizationSummary } from './types';
+import type {
+  CipherSummary,
+  CollectionSummary,
+  FolderSummary,
+  OrganizationSummary,
+  TrashItem,
+} from './types';
 import type { DecryptedVault } from './decrypt';
 
 /**
@@ -20,8 +26,11 @@ export class VaultState {
   private folderList: FolderSummary[] = [];
   private collectionList: CollectionSummary[] = [];
   private organizationList: OrganizationSummary[] = [];
+  private trashList: TrashItem[] = [];
   private lastSync: string | null = null;
   private lastSyncError: string | null = null;
+  /** Bumped whenever the decrypted view changes, so open views know to reload. */
+  private version = 0;
 
   get state(): LockState {
     if (!this.account) return 'logged-out';
@@ -36,6 +45,7 @@ export class VaultState {
       lastSync: this.lastSync,
       itemCount: this.userKey ? this.ciphers.length : 0,
       syncError: this.userKey ? this.lastSyncError : null,
+      version: this.version,
     };
   }
 
@@ -61,6 +71,10 @@ export class VaultState {
 
   get organizations(): readonly OrganizationSummary[] {
     return this.organizationList;
+  }
+
+  get trash(): readonly TrashItem[] {
+    return this.trashList;
   }
 
   get orgKeys(): ReadonlyMap<string, SymmetricKey> {
@@ -90,6 +104,7 @@ export class VaultState {
   }
 
   setVault(vault: DecryptedVault): void {
+    this.version++;
     if (vault.orgKeys !== this.orgKeyMap) this.zeroOrgKeys();
     this.orgKeyMap = vault.orgKeys;
     this.rawCiphers = vault.raw;
@@ -97,6 +112,7 @@ export class VaultState {
     this.folderList = vault.folders;
     this.collectionList = vault.collections;
     this.organizationList = vault.organizations;
+    this.trashList = vault.trash;
   }
 
   markSynced(at: Date = new Date()): void {
@@ -123,6 +139,7 @@ export class VaultState {
     this.folderList = [];
     this.collectionList = [];
     this.organizationList = [];
+    this.trashList = [];
     this.lastSyncError = null;
   }
 

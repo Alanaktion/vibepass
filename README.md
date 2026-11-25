@@ -4,10 +4,11 @@ A fast, keyboard-first browser extension for **self-hosted Bitwarden and Vaultwa
 It uses your existing server and vault, with a 1Password-style experience: quick find, inline
 autofill, and a calm item view. Nothing to migrate.
 
-> **Status: Phase 1 (read-only daily driver).** Quick find, item details, TOTP codes, autofill
-> for standard login forms, auto-lock, clipboard clearing, background sync, two-step login, and
-> read-only organization items. It never writes to the vault; saving and editing come in
-> Phase 2.
+> **Status: Phase 2 (write support), new.** Everything from Phase 1 (quick find, item details,
+> TOTP codes, autofill, auto-lock, clipboard clearing, background sync, two-step login,
+> organization items), plus creating, editing, and organizing items, a password generator, and
+> saving logins from web pages. Editing is **off by default**: turn on "Let Vibepass edit my
+> vault" in Settings. Until then Vibepass never writes to your vault.
 
 ## Using it
 
@@ -25,6 +26,18 @@ autofill, and a calm item view. Nothing to migrate.
   for that site. It asks before filling anything else, or an https login into an http page.
 - Copied secrets are cleared from the clipboard after 30 seconds, and the vault locks after 15
   minutes idle or when your computer locks. Both are in Settings (gear icon).
+- **Editing** (after turning it on in Settings): the + button starts a new login for the current
+  site. In an item, the pencil (or E) edits it and the star favorites it; the folder menu and
+  "Move to trash" are under the fields. In the editor, Ctrl+S (⌘S) saves and Escape cancels.
+  If the item changed on another device since you opened it, Vibepass asks before saving over
+  it. Folders and the trash (restore, or delete for good) are in Settings.
+- **Generator:** the key button opens the password and passphrase generator. It remembers your
+  options, and every password it makes is kept in an encrypted history, so a password used on a
+  site but never saved isn't lost.
+- **On web pages:** on a sign-up or change-password field, the inline menu offers "Use a strong
+  password" (following the site's `passwordrules` when it has them). After you sign in, sign up,
+  or change a password, a small banner offers to save the login or update the saved password.
+  You can edit the name before saving, pick which login to update, or say "Never for this site".
 - To stop the browser's own password manager from offering to save or fill passwords, turn on
   "Turn off the browser's built-in password manager" in Settings. Vibepass asks for the
   `privacy` permission only then. Browsers have no API for an extension to register as the
@@ -79,17 +92,19 @@ src/
     index.ts      Registers listeners (messages, alarms, commands)
     router.ts     Typed message dispatch; always replies with an { ok, data | error } envelope
     handlers.ts   One handler per message type
-    autofill.ts   Fill on gesture: page check, URI match, then send to the tab's top frame
+    service.ts    VaultService: order of operations for login, unlock, sync, and writes
+    autofill.ts   Fill on gesture; the save and update banner's decisions
     autolock.ts   Idle and system-lock auto-lock
     clipboard.ts  Clears copied secrets after the timeout (offscreen document in Chrome)
-  popup/        Preact UI: setup (with two-step login), unlock, quick find, item view, settings
+  popup/        Preact UI: setup, unlock, quick find, item view, editor, generator, folders,
+                trash, settings
   offscreen/    Chrome-only offscreen document that writes the clipboard for the worker
-  content/      Content script: login field detection and filling
-  api/          Bitwarden server API client: prelogin, token login and refresh, sync
-  crypto/       Thin wrapper over Bitwarden's SDK (WASM): KDF, user key, EncString
+  content/      Content script: field detection, filling, inline menu, save banner
+  api/          Bitwarden server API client: login, sync, and cipher and folder writes
+  crypto/       Thin wrapper over Bitwarden's SDK (WASM): KDF, keys, EncString, generator
   storage/      Settings (storage.local), session key (storage.session), vault cache (IndexedDB)
   search/       MiniSearch quick find, current site first
-  vault/        Vault state, decryption, URI matching (public suffix list), TOTP
+  vault/        Vault state, decryption, encryption, URI matching, TOTP
   shared/       Message protocol, messaging helper, browser API wrapper, logger
 scripts/
   build.mjs     Runs one Vite build per entry, then writes manifest.json
@@ -130,11 +145,15 @@ browser only where it must: Chrome uses `background.service_worker`, Firefox use
 Crypto comes from Bitwarden's official SDK, `@bitwarden/sdk-internal` (GPL-3.0), pinned to an
 exact version. `src/crypto/sdk.ts` loads its `.wasm` (copied to `dist/<browser>/sdk/` by the
 build) on first use, because MV3 service workers can't use dynamic imports or top-level await.
-Only its stateless `PureCrypto` API is used. See
-[docs/adr/0001-crypto-sdk.md](docs/adr/0001-crypto-sdk.md).
+Only its stateless `PureCrypto` API is used, plus the SDK's password generator. See
+[docs/adr/0001-crypto-sdk.md](docs/adr/0001-crypto-sdk.md) and
+[docs/adr/0002-write-path.md](docs/adr/0002-write-path.md).
 
 Tests check the wrapper against vaults written by the official Bitwarden web vault
-(`tests/fixtures/official-*.json`, throwaway accounts on a local Vaultwarden).
+(`tests/fixtures/official-*.json`, throwaway accounts on a local Vaultwarden). Writes are checked
+the other way too: `tests/encrypt.test.ts` encrypts items in Vibepass and decrypts them with
+Bitwarden's own cipher code (the SDK's `CiphersClient`, which the official clients use), and
+reads items that code encrypted, for every field type.
 
 ### Local test server
 
@@ -154,7 +173,13 @@ node scripts/dev/seed-vault.mjs http://127.0.0.1:8000 live@example.test 'live te
   http://127.0.0.1:8090/login            # add --two-factor on a second account to test 2FA
 npm run build:chrome
 node scripts/dev/live-check.mjs http://127.0.0.1:8000 live@example.test 'live test password'
+node scripts/dev/inline-menu-check.mjs http://127.0.0.1:8000 live@example.test 'live test password'
+node scripts/dev/write-check.mjs http://127.0.0.1:8000 live@example.test 'live test password'
 ```
+
+`write-check.mjs` writes to the vault (create, edit, conflicts, folders, trash, the save banner)
+and reads every write back with Bitwarden's own cipher code from a separate login. Run it only
+against a throwaway test server.
 
 Vaultwarden rate-limits logins (10 a minute by default), so wait a minute between repeated runs.
 
@@ -164,8 +189,8 @@ The web vault needs HTTPS, so create a self-signed `ssl/cert.pem` and `ssl/key.p
 ## Roadmap
 
 See [docs/PLAN.md](docs/PLAN.md) for the phased build plan. Phases 0 and 1 are done, with a
-basic inline menu and multi-step logins pulled forward from Phase 3; next is **Phase 2 (write
-support)**: save, update, edit, generate, and organize. Contributors and coding agents: start
+basic inline menu and multi-step logins pulled forward from Phase 3. **Phase 2 (write support)**
+is built and in its trial: save, update, edit, generate, and organize, behind a setting. Contributors and coding agents: start
 with [AGENTS.md](AGENTS.md).
 
 ## License

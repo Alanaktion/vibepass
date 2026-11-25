@@ -14,6 +14,13 @@ export interface Settings {
   autoCopyTotp: boolean;
   /** Show a menu of matching logins under login fields on web pages. */
   inlineMenu: boolean;
+  /**
+   * Let Vibepass change the vault: create, edit, organize, and delete items. Off by default
+   * while write support is new (Phase 2 gate).
+   */
+  allowEdits: boolean;
+  /** After signing in or changing a password on a site, offer to save or update the login. */
+  offerToSave: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -23,6 +30,8 @@ export const DEFAULT_SETTINGS: Settings = {
   showIcons: true,
   autoCopyTotp: true,
   inlineMenu: true,
+  allowEdits: false,
+  offerToSave: true,
 };
 
 export const LOCK_AFTER_CHOICES = [1, 5, 15, 30, 60, 240, 0] as const;

@@ -1,4 +1,4 @@
-import { Lock, RefreshCw, Settings, Star } from 'lucide-preact';
+import { KeyRound, Lock, Plus, RefreshCw, Settings, Star } from 'lucide-preact';
 import { Fragment } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { sendMessage } from '../../shared/messaging';
@@ -13,6 +13,9 @@ import { IconButton } from './IconButton';
 interface Props {
   onOpen: (id: string) => void;
   onSettings: () => void;
+  /** Start a new item (only offered when editing is turned on). */
+  onNew: (type: CipherType.Login | CipherType.SecureNote) => void;
+  onGenerator: () => void;
   /** Keeps the query when coming back from an item. */
   query: string;
   onQuery: (query: string) => void;
@@ -32,7 +35,7 @@ const TYPE_LABEL: Record<CipherType, string> = {
  * opens the item, and Mod+C, Mod+Shift+C, Mod+Alt+C copy the username, password, and
  * one-time password.
  */
-export function QuickFind({ onOpen, onSettings, query, onQuery }: Props) {
+export function QuickFind({ onOpen, onSettings, onNew, onGenerator, query, onQuery }: Props) {
   const ctx = usePopup();
   const { status, tab, settings } = ctx;
   const [results, setResults] = useState<SearchHit[]>([]);
@@ -56,7 +59,7 @@ export function QuickFind({ onOpen, onSettings, query, onQuery }: Props) {
       cancelled = true;
     };
     // Re-run when a sync changes the vault, not only when the query changes.
-  }, [query, tab?.url, status.lastSync, status.itemCount]);
+  }, [query, tab?.url, status.version]);
 
   useEffect(() => {
     listRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
@@ -122,6 +125,16 @@ export function QuickFind({ onOpen, onSettings, query, onQuery }: Props) {
           onKeyDown={onKeyDown}
           autoFocus
         />
+        {settings?.allowEdits && (
+          <IconButton
+            icon={Plus}
+            label="New login"
+            onClick={() => {
+              onNew(CipherType.Login);
+            }}
+          />
+        )}
+        <IconButton icon={KeyRound} label="Password generator" onClick={onGenerator} />
         <IconButton icon={Settings} label="Settings" onClick={onSettings} />
         <IconButton
           icon={Lock}
@@ -195,7 +208,31 @@ export function QuickFind({ onOpen, onSettings, query, onQuery }: Props) {
         })}
       </ul>
       {results.length === 0 && (
-        <p class="empty muted">{query ? `No items match “${query}”` : 'Your vault is empty'}</p>
+        <div class="empty">
+          <p class="muted">{query ? `No items match “${query}”` : 'Your vault is empty'}</p>
+          {settings?.allowEdits && (
+            <div class="row center">
+              <button
+                type="button"
+                class="ghost"
+                onClick={() => {
+                  onNew(CipherType.Login);
+                }}
+              >
+                New login
+              </button>
+              <button
+                type="button"
+                class="ghost"
+                onClick={() => {
+                  onNew(CipherType.SecureNote);
+                }}
+              >
+                New note
+              </button>
+            </div>
+          )}
+        </div>
       )}
       <footer class="row footer muted">
         <span class="grow hints">

@@ -17,6 +17,7 @@ import {
   rememberedTwoFactor,
   saveAccount,
 } from '../storage/account';
+import { generatorStore } from '../storage/generator';
 import { sessionStore } from '../storage/session';
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type Settings } from '../storage/settings';
 import { vaultCache } from '../storage/vault-cache';
@@ -45,8 +46,12 @@ const service = new VaultService(vault, search, {
   cache: vaultCache,
   remembered: rememberedTwoFactor,
   device: __BROWSER__ === 'firefox' ? { type: 3, name: 'firefox' } : { type: 2, name: 'chrome' },
+  writesEnabled: async () => (await settings()).allowEdits,
+  generator: generatorStore,
   now: () => Date.now(),
   onStatus: (status) => {
+    // A login waiting for the save banner must not outlive the unlocked vault.
+    if (status.state !== 'unlocked') autofill.clearPending();
     const event: StatusEvent = { source: 'vibepass', type: 'event:status', payload: status };
     // No popup open is the normal case, so a missing receiver is not an error.
     browser.runtime.sendMessage(event).catch(() => undefined);

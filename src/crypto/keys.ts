@@ -97,3 +97,13 @@ export async function decryptString(value: EncString, key: SymmetricKey): Promis
 export async function encryptString(value: string, key: SymmetricKey): Promise<EncString> {
   return (await sdk()).symmetric_encrypt_string(value, key);
 }
+
+/** A fresh per-item key (AES-256-CBC + HMAC), as the official clients make for new items. */
+export async function makeCipherKey(): Promise<SymmetricKey> {
+  return (await sdk()).make_user_key_aes256_cbc_hmac();
+}
+
+/** Wrap a per-item key with its owner's (user or organization) key. */
+export async function wrapKey(key: SymmetricKey, wrappingKey: SymmetricKey): Promise<EncString> {
+  return (await sdk()).wrap_symmetric_key(key, wrappingKey);
+}

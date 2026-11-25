@@ -55,6 +55,11 @@ export interface CipherSummary {
   reprompt: boolean;
 }
 
+/** An item in the trash. */
+export interface TrashItem extends CipherSummary {
+  deletedDate: string;
+}
+
 /** A search result: a summary, plus whether it is saved for the page the user is on. */
 export interface SearchHit extends CipherSummary {
   siteMatch: boolean;
@@ -119,4 +124,54 @@ export interface CipherDetail {
   hasTotp: boolean;
   reprompt: boolean;
   revisionDate: string;
+  folderId: string | null;
+  /** The user may change this item (personal items, and shared ones with edit access). */
+  canEdit: boolean;
+  /** Set when the item is in the trash. */
+  deletedDate: string | null;
+}
+
+/** A custom field as the editor sees it. Linked fields keep their target and have no value. */
+export interface DraftField {
+  name: string;
+  value: string;
+  type: FieldType;
+  linkedId: number | null;
+}
+
+/**
+ * The editable, decrypted form of an item. Only what the editor changes is here; everything
+ * else on the server copy (card and identity details, passkeys, attachments, fields from newer
+ * clients) is carried over untouched when the item is saved.
+ */
+export interface ItemDraft {
+  type: CipherType;
+  name: string;
+  notes: string;
+  favorite: boolean;
+  folderId: string | null;
+  /** Ask for the master password before showing or filling secrets. */
+  reprompt: boolean;
+  login: {
+    username: string;
+    password: string;
+    totp: string;
+    uris: LoginUri[];
+  } | null;
+  fields: DraftField[];
+}
+
+/** An item opened for editing: the draft plus what the editor needs to save it safely. */
+export interface EditableItem {
+  id: string;
+  /** Sent back on save, so the server can refuse it if another client changed the item. */
+  revisionDate: string;
+  organization: string | null;
+  draft: ItemDraft;
+}
+
+/** One previously used password, newest first. */
+export interface PasswordHistoryEntry {
+  password: string;
+  lastUsedDate: string;
 }

@@ -10,10 +10,14 @@ import type {
   InlineMenuItem,
   InlineMenuState,
   PageInfo,
+  SaveAnswer,
+  SavePrompt,
+  SubmittedLogin,
 } from '../shared/messages';
 import type { SearchIndex } from '../search';
 import type { Settings } from '../storage/settings';
 import { isInsecureDowngrade, matchItem, MatchQuality, parseUri } from '../vault/match';
+import { newDraft } from '../vault/encrypt';
 import { CipherType } from '../vault/types';
 import type { VaultState } from '../vault/state';
 import type { VaultService } from './service';
@@ -40,6 +44,9 @@ export interface AutofillDeps {
  * after the username page) offers the same login first.
  */
 export const RECENT_FILL_MS = 5 * 60_000;
+
+/** How long after a form submit the page (or the page it led to) still offers to save. */
+export const SAVE_PROMPT_MS = 2 * 60_000;
 
 export interface FillRequest {
   tabId: number;
@@ -167,7 +174,13 @@ export function createAutofill(deps: AutofillDeps) {
       reprompt: hit.reprompt,
       recent: isRecent,
     }));
-    return { state: 'unlocked', items };
+    const settings = await deps.settings();
+    return {
+      state: 'unlocked',
+      items,
+      canGenerate: true,
+      offerToSave: settings.allowEdits && settings.offerToSave,
+    };
   }
 
   /**
@@ -182,5 +195,150 @@ export function createAutofill(deps: AutofillDeps) {
     return fill({ tabId, id });
   }
 
-  return { fill, fillBest, fillFromMenu, inspect, menu };
+  // --- Save and update banner -------------------------------------------------------------
+
+  interface Pending {
+    /** Registrable domain of the page that submitted. */
+    domain: string;
+    origin: string;
+    username: string | null;
+    /** The password to save. Lives only in worker memory, for SAVE_PROMPT_MS, while unlocked. */
+    password: string;
+    prompt: SavePrompt;
+    at: number;
+  }
+  const pending = new Map<number, Pending>();
+  /** Sites the user said "never" for, until the browser restarts. Domains only. */
+  const never = new Set<string>();
+
+  function clearPending(): void {
+    pending.clear();
+  }
+
+  function pendingFor(tabId: number, url: string): Pending | null {
+    const entry = pending.get(tabId);
+    const page = parseUri(url);
+    if (!entry || !page) return null;
+    if (now() - entry.at > SAVE_PROMPT_MS || !deps.vault.isUnlocked) {
+      pending.delete(tabId);
+      return null;
+    }
+    return entry.domain === page.domain ? entry : null;
+  }
+
+  /**
+   * A login form was submitted. Decide whether to offer saving a new login or updating the
+   * password of a saved one, and remember the credentials until the user answers.
+   */
+  async function submitted(
+    tabId: number,
+    url: string,
+    login: SubmittedLogin,
+  ): Promise<SavePrompt | null> {
+    const settings = await deps.settings();
+    if (!settings.offerToSave || !settings.allowEdits || !deps.vault.isUnlocked) return null;
+    const page = parseUri(url);
+    const secret = login.newPassword ?? login.password;
+    if (!page || !secret || never.has(page.domain)) return null;
+    if (page.url.protocol !== 'https:' && page.url.protocol !== 'http:') return null;
+    const username = login.username?.trim() ?? null;
+
+    const saved = [];
+    for (const { hit } of loginsFor(tabId, url)) {
+      saved.push({ hit, ...(await deps.service.credentials(hit.id)) });
+    }
+    // Already saved as is: nothing to ask.
+    if (saved.some((s) => s.password === secret && (!username || s.username === username))) {
+      return null;
+    }
+    // A password change names the old password, which identifies the login best; otherwise
+    // the username does.
+    const byOldPassword =
+      login.newPassword && login.password ? saved.filter((s) => s.password === login.password) : [];
+    const byUsername = username ? saved.filter((s) => (s.username ?? '') === username) : [];
+    const candidates = byOldPassword.length > 0 ? byOldPassword : byUsername;
+
+    const host = page.url.hostname;
+    const prompt: SavePrompt =
+      candidates.length > 0
+        ? {
+            kind: 'update',
+            host,
+            username: username ?? candidates[0]?.username ?? null,
+            items: candidates.map((c) => ({
+              id: c.hit.id,
+              name: c.hit.name,
+              username: c.hit.subtitle,
+            })),
+          }
+        : { kind: 'save', host, username, suggestedName: host.replace(/^www\./, '') };
+    for (const [tab, entry] of pending) if (now() - entry.at > SAVE_PROMPT_MS) pending.delete(tab);
+    pending.set(tabId, {
+      domain: page.domain,
+      origin: page.url.origin,
+      username,
+      password: secret,
+      prompt,
+      at: now(),
+    });
+    return prompt;
+  }
+
+  /** The banner to show on a page that just loaded, if a submit in this tab is waiting. */
+  function pendingPrompt(tabId: number, url: string): SavePrompt | null {
+    return pendingFor(tabId, url)?.prompt ?? null;
+  }
+
+  /** Whether a page should send submitted logins at all. */
+  async function offersToSave(): Promise<boolean> {
+    const settings = await deps.settings();
+    return deps.vault.isUnlocked && settings.allowEdits && settings.offerToSave;
+  }
+
+  /** The user answered the banner (a trusted click on the page, checked by the content script). */
+  async function answer(
+    tabId: number,
+    url: string,
+    reply: SaveAnswer,
+  ): Promise<{ message: string }> {
+    const entry = pendingFor(tabId, url);
+    if (!entry) throw new Error('Nothing to save here anymore');
+    if (reply.action === 'dismiss' || reply.action === 'never') {
+      pending.delete(tabId);
+      if (reply.action === 'never') never.add(entry.domain);
+      return { message: '' };
+    }
+    if (reply.action === 'update') {
+      if (entry.prompt.kind !== 'update' || !entry.prompt.items.some((i) => i.id === reply.id)) {
+        throw new Error('That login can’t be updated from this page');
+      }
+      await deps.service.updatePassword(reply.id, entry.password);
+      pending.delete(tabId);
+      return { message: 'Password updated' };
+    }
+    const draft = newDraft(CipherType.Login);
+    draft.name = reply.name.trim() || entry.prompt.host;
+    draft.login = {
+      username: entry.username ?? '',
+      password: entry.password,
+      totp: '',
+      uris: [{ uri: entry.origin, match: null }],
+    };
+    await deps.service.saveItem({ id: null, draft });
+    pending.delete(tabId);
+    return { message: 'Saved to Vibepass' };
+  }
+
+  return {
+    fill,
+    fillBest,
+    fillFromMenu,
+    inspect,
+    menu,
+    submitted,
+    pendingPrompt,
+    offersToSave,
+    answer,
+    clearPending,
+  };
 }

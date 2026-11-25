@@ -119,6 +119,8 @@ export interface CipherResponse {
     | { name: string | null; value: string | null; type: FieldType; linkedId?: number | null }[]
     | null;
   attachments?: AttachmentResponse[] | null;
+  /** Old passwords (EncStrings), newest first. */
+  passwordHistory?: { password: string; lastUsedDate: string }[] | null;
 }
 
 export type IdentityField =
@@ -167,6 +169,12 @@ export interface OrganizationResponse {
   /** Organization key, RSA-encrypted to the account's public key. */
   key: string;
   enabled?: boolean;
+}
+
+/** POST and PUT /api/folders */
+export interface FolderRequest {
+  /** EncString, encrypted with the user key. */
+  name: string;
 }
 
 export interface FolderResponse {

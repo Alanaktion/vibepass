@@ -14,10 +14,14 @@ import {
   type PageInfo,
 } from '../shared/messages';
 import { sendMessage } from '../shared/messaging';
+import { SaveBanner } from './banner';
 import {
   detectLoginFields,
   fieldAutocomplete,
   fillInput,
+  isNewPasswordField,
+  newPasswordFields,
+  readSubmitted,
   restoreBrowserAutocomplete,
   suppressBrowserAutocomplete,
 } from './detect';
@@ -81,9 +85,10 @@ const suppressed = new Set<HTMLInputElement>();
 
 const menu = new InlineMenu({ onPick: (row) => void pick(row) });
 
-type FieldKind = 'username' | 'password' | 'totp';
+type FieldKind = 'username' | 'password' | 'totp' | 'new-password';
 
 function loginFieldKind(input: HTMLInputElement): FieldKind | null {
+  if (isNewPasswordField(input)) return 'new-password';
   const fields = detectLoginFields();
   if (fields.password === input) return 'password';
   if (fields.username === input) return 'username';
@@ -96,6 +101,10 @@ export function menuRows(state: InlineMenuState | null, input: HTMLInputElement)
   if (!state || state.state === 'off') return [];
   const kind = loginFieldKind(input);
   if (!kind) return [];
+  if (kind === 'new-password') {
+    // Sign up or change password: offer a new password, never an existing login.
+    return state.state === 'unlocked' && state.canGenerate ? [{ kind: 'generate' }] : [];
+  }
   if (state.state === 'locked') {
     // Only where it's clearly a login, so a newsletter email box doesn't nag while locked.
     const clear =
@@ -110,6 +119,7 @@ export function menuRows(state: InlineMenuState | null, input: HTMLInputElement)
 async function refreshState(): Promise<InlineMenuState | null> {
   try {
     cachedState = await sendMessage('autofill:menu');
+    offerToSave = cachedState.state === 'unlocked' && cachedState.offerToSave === true;
   } catch (error) {
     log.debug('inline menu unavailable', { reason: error instanceof Error ? error.message : '' });
     cachedState = null;
@@ -135,9 +145,34 @@ function openFor(input: HTMLInputElement): void {
   });
 }
 
+/** Fill a generated password into a new-password field and its confirm field. */
+async function fillGenerated(anchor: HTMLInputElement): Promise<void> {
+  const { password } = await sendMessage('autofill:generate', {
+    rules: anchor.getAttribute('passwordrules'),
+  });
+  filling = true;
+  try {
+    for (const field of newPasswordFields(anchor)) fillInput(field, password);
+  } finally {
+    filling = false;
+  }
+  anchor.focus();
+}
+
 async function pick(row: MenuRow): Promise<void> {
   const anchor = menu.anchor;
   if (row.kind === 'message') return;
+  if (row.kind === 'generate') {
+    if (!anchor) return;
+    try {
+      await fillGenerated(anchor);
+      menu.close();
+    } catch (error) {
+      const text = error instanceof Error ? error.message : 'Could not make a password';
+      menu.open(anchor, [{ kind: 'message', text }]);
+    }
+    return;
+  }
   if (row.kind === 'unlock' || row.item.reprompt) {
     menu.close();
     await sendMessage('autofill:open-popup').catch(() => {
@@ -253,6 +288,95 @@ export function inlineMenu(): InlineMenu {
   return menu;
 }
 
+// ---- Save and update banner ----
+
+const banner = new SaveBanner({
+  onAnswer: async (answer) => (await sendMessage('autofill:save-answer', answer)).message,
+});
+
+/** For tests. */
+export function saveBanner(): SaveBanner {
+  return banner;
+}
+
+let lastCapture = { key: '', at: 0 };
+/**
+ * Whether the worker would offer to save (unlocked, editing and saving on). Until it says so,
+ * submitted passwords are not sent to it at all.
+ */
+let offerToSave = false;
+
+/**
+ * A login, sign-up, or password-change form is being submitted: send what it holds to the
+ * worker, which decides whether to offer saving it. Real user actions only.
+ */
+export async function captureSubmit(scope: HTMLFormElement | Document): Promise<void> {
+  if (!offerToSave) return;
+  const login = readSubmitted(scope);
+  if (!login) return;
+  // A click on the submit button and the submit event that follows are one submit.
+  const key = JSON.stringify(login);
+  if (key === lastCapture.key && Date.now() - lastCapture.at < 2000) return;
+  lastCapture = { key, at: Date.now() };
+  try {
+    const prompt = await sendMessage('autofill:submitted', login);
+    if (prompt) banner.show(prompt);
+  } catch (error) {
+    log.debug('save check failed', { reason: error instanceof Error ? error.message : '' });
+  }
+}
+
+function scopeOf(el: Element | null): HTMLFormElement | Document {
+  const form = el?.closest('form');
+  return form ?? document;
+}
+
+const SUBMIT_TEXT =
+  /^(log ?in|sign ?in|sign ?up|register|create|continue|next|submit|save|update|change|join|done|ok|go)\b/i;
+
+function looksLikeSubmit(el: Element): boolean {
+  const button = el.closest('button, input[type="submit"], input[type="image"], [role="button"]');
+  if (!button) return false;
+  if (button instanceof HTMLButtonElement && button.form) return button.type === 'submit';
+  if (button instanceof HTMLInputElement) return true;
+  const text = (button.textContent || button.getAttribute('aria-label') || '').trim();
+  return SUBMIT_TEXT.test(text);
+}
+
+function onSubmit(event: SubmitEvent): void {
+  if (!event.isTrusted) return;
+  if (event.target instanceof HTMLFormElement) void captureSubmit(event.target);
+}
+
+/** Many sites submit with script on a button click and never fire a submit event. */
+function onSubmitClick(event: MouseEvent): void {
+  if (!event.isTrusted) return;
+  const target = event.composedPath()[0];
+  if (!(target instanceof Element) || !looksLikeSubmit(target)) return;
+  void captureSubmit(scopeOf(target));
+}
+
+/** Enter in a password field submits most forms, with or without a submit event. */
+function onSubmitKey(event: KeyboardEvent): void {
+  if (!event.isTrusted || event.key !== 'Enter' || menu.isOpen) return;
+  const input = inputFromEvent(event);
+  if (input?.type !== 'password') return;
+  void captureSubmit(scopeOf(input));
+}
+
+export function startSaveBanner(): void {
+  document.addEventListener('submit', onSubmit, true);
+  document.addEventListener('click', onSubmitClick, true);
+  document.addEventListener('keydown', onSubmitKey, true);
+  // A submit that navigated here: the worker still has the banner for this site.
+  sendMessage('autofill:pending-prompt')
+    .then(({ prompt, offer }) => {
+      offerToSave = offer;
+      if (prompt) banner.show(prompt);
+    })
+    .catch(() => undefined);
+}
+
 function handle(message: unknown): Promise<unknown> | undefined {
   if (!isContentRequest(message)) return undefined;
   return Promise.resolve().then(() =>
@@ -273,6 +397,7 @@ function main(): void {
   window.__vibepassContent = true;
   browser.runtime.onMessage.addListener(handle);
   startInlineMenu();
+  startSaveBanner();
   sendMessage('autofill:page-ready', {
     url: location.href,
     loginForms: countLoginForms(),

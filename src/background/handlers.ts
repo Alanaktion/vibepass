@@ -95,6 +95,49 @@ export function createHandlers(ctx: BackgroundContext): Handlers {
       return undefined;
     },
 
+    'autofill:submitted': (login, sender) => {
+      const { tabId, url } = topFrameTab(sender);
+      return need(ctx.autofill, 'Autofill').submitted(tabId, url, login);
+    },
+    'autofill:pending-prompt': async (_request, sender) => {
+      const { tabId, url } = topFrameTab(sender);
+      await service.status();
+      const autofill = need(ctx.autofill, 'Autofill');
+      return { prompt: autofill.pendingPrompt(tabId, url), offer: await autofill.offersToSave() };
+    },
+    'autofill:save-answer': (reply, sender) => {
+      const { tabId, url } = topFrameTab(sender);
+      return need(ctx.autofill, 'Autofill').answer(tabId, url, reply);
+    },
+    'autofill:generate': async ({ rules }, sender) => {
+      topFrameTab(sender);
+      return { password: await service.generatePassword({ rules }) };
+    },
+
+    'vault:edit': ({ id, masterPassword }) => service.editable(id, masterPassword),
+    'vault:save': async (request) => ({ id: await service.saveItem(request) }),
+    'vault:organize': ({ id, ...patch }) => service.organize(id, patch).then(() => undefined),
+    'vault:trash-item': ({ id }) => service.trashItem(id).then(() => undefined),
+    'vault:restore': ({ id }) => service.restoreItem(id).then(() => undefined),
+    'vault:delete-forever': ({ id }) => service.deleteItem(id).then(() => undefined),
+    'vault:trash': async () => {
+      await service.status();
+      return [...service.trash()];
+    },
+    'vault:folders': async () => {
+      await service.status();
+      return [...service.folders()];
+    },
+    'folder:create': ({ name }) => service.createFolder(name),
+    'folder:rename': ({ id, name }) => service.renameFolder(id, name).then(() => undefined),
+    'folder:delete': ({ id }) => service.deleteFolder(id).then(() => undefined),
+    'generator:options': () => service.generatorOptions(),
+    'generator:generate': async ({ options }) => ({
+      password: await service.generatePassword({ options }),
+    }),
+    'generator:history': () => service.generatorHistory(),
+    'generator:clear-history': () => service.clearGeneratorHistory().then(() => undefined),
+
     'clipboard:copied': () =>
       need(ctx.clipboard, 'Clipboard')
         .scheduleClear()

@@ -103,6 +103,7 @@ describe('background router', () => {
         lastSync: null,
         itemCount: 0,
         syncError: null,
+        version: 0,
       },
     });
   });

@@ -4,7 +4,7 @@ How we get from the current scaffold to a public v1, phase by phase. This follow
 the project spec (Spike, MVP, Write support, Beta, v1, Later) and adds the concrete milestones and
 exit criteria for each phase, based on what is already in the repo.
 
-Last updated: 2026-11-25 (Phase 1 built; basic inline menu and multi-step logins pulled forward).
+Last updated: 2026-11-25 (Phase 2 built behind a setting; Phase 3 sign-up and password-change forms added).
 
 ## Where we are
 
@@ -176,6 +176,25 @@ implementation detail; the UI, search, autofill engine, and message protocol sta
 
 **Goal:** manage the full login lifecycle without opening another client.
 
+> **Status (2026-11-25): built, behind the off-by-default "Let Vibepass edit my vault" setting.**
+>
+> - All six milestones are in. Decisions are in [ADR 0002](adr/0002-write-path.md).
+> - **Gate:** `tests/encrypt.test.ts` checks round trips with Bitwarden's own cipher code (the
+>   SDK's `CiphersClient`, used by the official clients) in both directions, for every field
+>   type, on PBKDF2 and Argon2id accounts, and that edits keep fields Vibepass doesn't edit
+>   (unknown fields, card details, attachments, passkeys). It runs in CI with the other 170+
+>   tests.
+> - **Live:** `scripts/dev/write-check.mjs` passed 18 of 18 against Vaultwarden 1.37.5 in
+>   Chromium, reading every write back with Bitwarden's cipher code from a separate login:
+>   create (popup), edit with password history, edit keeping attachments, custom fields, and
+>   TOTP, an organization item, a server-side conflict and overwrite, folders, trash and
+>   restore, a sign-up page with the generated password and the save banner, and the update
+>   banner. The Phase 1 live check (19 of 19) and inline menu check (15 of 15) still pass.
+> - Not yet: self-hosted Bitwarden live (its image can't be pulled in the build environment),
+>   Firefox live testing, creating organization items and changing collections, editing card,
+>   identity, and SSH key fields (kept as they are on save), and running the live checks in CI.
+> - The editing setting stays off by default until Alan's 2-week lifecycle trial.
+
 ### Gate before any write
 
 Encrypt round-trips (encrypt in Vibepass, decrypt in the official clients, and the reverse) pass
@@ -223,8 +242,11 @@ until this gate is green in CI.
 >   asks for a username; the password step offers the login just filled in that tab first (for
 >   5 minutes), and the fill shortcut prefers it too. Split logins take a clearly labelled
 >   username from another form.
-> - **Not yet:** signup forms with the generator and password-change forms with the update
->   banner (both need Phase 2 writes), screen reader announcements for the menu, search inside
+> - **Sign-up and password-change forms (with Phase 2):** new-password fields offer "Use a
+>   strong password" in the inline menu (following `passwordrules`), filling the confirm field
+>   too; after a submit, the save banner offers to save the login or update the saved password
+>   (a password-change form finds the login by its old password).
+> - **Not yet:** screen reader announcements for the menu, search inside
 >   the menu, cross-origin iframes, and Firefox testing of the menu.
 
 ### Milestones

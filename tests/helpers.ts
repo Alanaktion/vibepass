@@ -1,8 +1,9 @@
 import { ApiClient } from '../src/api';
-import type { SyncResponse } from '../src/api/types';
+import type { CipherResponse, SyncResponse } from '../src/api/types';
 import { VaultService, type ServiceDeps } from '../src/background/service';
 import type { SearchIndex } from '../src/search';
 import type { Account } from '../src/storage/account';
+import { DEFAULT_GENERATOR, type StoredGeneratorOptions } from '../src/storage/generator';
 import type { UnlockedSession } from '../src/storage/session';
 import type { VaultState } from '../src/vault/state';
 import type { OfficialVaultFixture } from './fixtures';
@@ -24,6 +25,8 @@ export interface FakeServer {
   /** Extra routes: path -> response. */
   routes: Map<string, () => Response>;
   forms: URLSearchParams[];
+  /** Write requests (method, path, and JSON body), in order. */
+  writes: { method: string; path: string; body: Record<string, unknown> | null }[];
 }
 
 const json = (status: number, body: unknown) =>
@@ -42,12 +45,17 @@ export function fakeServer(fixture: OfficialVaultFixture): FakeServer {
     sync: fixture.sync,
     routes: new Map(),
     forms: [],
+    writes: [],
     fetch: (url, init) => {
       const path = new URL(url).pathname;
       server.calls.push(path);
       if (server.offline) return Promise.reject(new TypeError('Failed to fetch'));
       const route = server.routes.get(path);
       if (route) return Promise.resolve(route());
+      const method = init?.method ?? 'GET';
+      if (method !== 'GET' && path.startsWith('/api/')) {
+        return Promise.resolve(writeRoute(server, method, path, init?.body));
+      }
       if (path === '/api/accounts/revision-date')
         return Promise.resolve(json(200, server.revision));
       if (path === '/identity/accounts/prelogin') {
@@ -136,12 +144,116 @@ export function fakeServer(fixture: OfficialVaultFixture): FakeServer {
   return server;
 }
 
+let serial = 0;
+
+/** Vaultwarden-like handling of cipher and folder writes against the served sync response. */
+function writeRoute(server: FakeServer, method: string, path: string, raw: unknown): Response {
+  const body = typeof raw === 'string' && raw ? (JSON.parse(raw) as Record<string, unknown>) : null;
+  server.writes.push({ method, path, body });
+  server.revision++;
+  const now = new Date(Date.parse('2026-11-25T12:00:00Z') + ++serial * 1000).toISOString();
+  const sync = structuredClone(server.sync);
+  server.sync = sync;
+  const parts = path.split('/').filter(Boolean); // ['api', 'ciphers', id, action]
+  const find = (id: string | undefined) => sync.ciphers.find((c) => c.id === id);
+
+  if (parts[1] === 'folders') {
+    const id = parts[2];
+    if (method === 'POST') {
+      const folder = {
+        id: `folder-${String(serial)}`,
+        name: body?.name as string,
+        revisionDate: now,
+      };
+      sync.folders.push(folder);
+      return json(200, folder);
+    }
+    const folder = sync.folders.find((f) => f.id === id);
+    if (!folder) return json(404, { message: 'Folder not found' });
+    if (method === 'DELETE') {
+      sync.folders = sync.folders.filter((f) => f.id !== id);
+      for (const c of sync.ciphers) if (c.folderId === id) c.folderId = null;
+      return new Response(null, { status: 200 });
+    }
+    folder.name = body?.name as string;
+    folder.revisionDate = now;
+    return json(200, folder);
+  }
+
+  if (parts[1] !== 'ciphers') return json(404, { message: 'Not found' });
+  if (method === 'POST' && parts.length === 2) {
+    const created = {
+      ...body,
+      id: `cipher-${String(serial)}`,
+      revisionDate: now,
+      creationDate: now,
+      deletedDate: null,
+      edit: true,
+      viewPassword: true,
+      collectionIds: [],
+      attachments: null,
+      object: 'cipherDetails',
+    } as unknown as CipherResponse;
+    Reflect.deleteProperty(created, 'lastKnownRevisionDate');
+    Reflect.deleteProperty(created, 'encryptedFor');
+    sync.ciphers.push(created);
+    return json(200, created);
+  }
+  const cipher = find(parts[2]);
+  if (!cipher) return json(404, { message: "Cipher doesn't exist" });
+  const action = parts[3];
+  if (method === 'DELETE') {
+    sync.ciphers = sync.ciphers.filter((c) => c !== cipher);
+    return new Response(null, { status: 200 });
+  }
+  if (action === 'delete') {
+    cipher.deletedDate = now;
+    cipher.revisionDate = now;
+    return new Response(null, { status: 200 });
+  }
+  if (action === 'restore') {
+    cipher.deletedDate = null;
+    cipher.revisionDate = now;
+    return json(200, cipher);
+  }
+  if (action === 'partial') {
+    cipher.folderId = (body?.folderId as string | null) ?? null;
+    cipher.favorite = Boolean(body?.favorite);
+    return json(200, cipher);
+  }
+  // Full update.
+  if (body?.lastKnownRevisionDate !== cipher.revisionDate) {
+    return json(400, {
+      message: 'The client copy of this cipher is out of date. Resync the client and try again.',
+      errorModel: {
+        message: 'The client copy of this cipher is out of date. Resync the client and try again.',
+        object: 'error',
+      },
+    });
+  }
+  const updated = {
+    ...cipher,
+    ...body,
+    id: cipher.id,
+    revisionDate: now,
+    attachments: cipher.attachments ?? null,
+  } as unknown as CipherResponse & Record<string, unknown>;
+  for (const key of ['lastKnownRevisionDate', 'encryptedFor', 'attachments2']) {
+    Reflect.deleteProperty(updated, key);
+  }
+  sync.ciphers = sync.ciphers.map((c) => (c === cipher ? updated : c));
+  return json(200, updated);
+}
+
 export function memoryDeps(server?: FakeServer): ServiceDeps & {
   stored: {
     account: Account | null;
     session: UnlockedSession | null;
     cache: Map<string, SyncResponse>;
     remembered: Map<string, string>;
+    writes: boolean;
+    generatorOptions: StoredGeneratorOptions;
+    history: string[];
   };
 } {
   const stored = {
@@ -149,6 +261,9 @@ export function memoryDeps(server?: FakeServer): ServiceDeps & {
     session: null as UnlockedSession | null,
     cache: new Map<string, SyncResponse>(),
     remembered: new Map<string, string>(),
+    writes: true,
+    generatorOptions: DEFAULT_GENERATOR,
+    history: [] as string[],
   };
   let now = Date.parse('2026-11-25T00:00:00Z');
   return {
@@ -207,6 +322,23 @@ export function memoryDeps(server?: FakeServer): ServiceDeps & {
       },
     },
     device: { type: 2, name: 'chrome' },
+    writesEnabled: () => Promise.resolve(stored.writes),
+    generator: {
+      loadOptions: () => Promise.resolve(stored.generatorOptions),
+      saveOptions: (options) => {
+        stored.generatorOptions = options;
+        return Promise.resolve();
+      },
+      loadHistory: () => Promise.resolve([...stored.history]),
+      saveHistory: (entries) => {
+        stored.history = [...entries];
+        return Promise.resolve();
+      },
+      clearHistory: () => {
+        stored.history = [];
+        return Promise.resolve();
+      },
+    },
     now: () => (now += 1000),
   };
 }

@@ -6,6 +6,7 @@ import {
   unwrapPrivateKey,
   type SymmetricKey,
 } from '../crypto';
+import { canEncrypt } from './encrypt';
 import {
   CipherType,
   type AttachmentSummary,
@@ -18,6 +19,7 @@ import {
   type LoginUri,
   FieldType,
   type OrganizationSummary,
+  type TrashItem,
 } from './types';
 
 export interface DecryptedVault {
@@ -31,6 +33,8 @@ export interface DecryptedVault {
   orgKeys: Map<string, SymmetricKey>;
   /** The encrypted ciphers, by id, so one item can be fully decrypted on demand. */
   raw: Map<string, CipherResponse>;
+  /** Items in the server's trash, newest first. Not searchable and never filled. */
+  trash: TrashItem[];
   /** Items we could not decrypt (for example, an organization whose key we can't read). */
   skipped: number;
 }
@@ -43,6 +47,7 @@ export const emptyVault = (): DecryptedVault => ({
   notes: new Map(),
   orgKeys: new Map(),
   raw: new Map(),
+  trash: [],
   skipped: 0,
 });
 
@@ -91,7 +96,6 @@ export async function decryptVault(
   }
 
   for (const cipher of sync.ciphers) {
-    if (cipher.deletedDate) continue;
     const ownerKey = ownerKeyFor(cipher, userKey, vault.orgKeys);
     if (!ownerKey) {
       vault.skipped++;
@@ -99,8 +103,12 @@ export async function decryptVault(
     }
     try {
       const { summary, notes } = await decryptSummary(cipher, ownerKey);
-      vault.items.push(summary);
       vault.raw.set(cipher.id, cipher);
+      if (cipher.deletedDate) {
+        vault.trash.push({ ...summary, deletedDate: cipher.deletedDate });
+        continue;
+      }
+      vault.items.push(summary);
       if (notes) vault.notes.set(cipher.id, notes);
     } catch {
       vault.skipped++;
@@ -134,6 +142,7 @@ export async function decryptVault(
   vault.folders.sort(byName);
   vault.collections.sort(byName);
   vault.organizations.sort(byName);
+  vault.trash.sort((a, b) => b.deletedDate.localeCompare(a.deletedDate));
   return vault;
 }
 
@@ -223,7 +232,10 @@ export interface DecryptedCipher {
   collectionIds: string[];
   reprompt: boolean;
   viewPassword: boolean;
+  /** The server lets this user change the item, and Vibepass can re-encrypt its format. */
+  canEdit: boolean;
   revisionDate: string;
+  deletedDate: string | null;
   login: {
     username: string | null;
     password: string | null;
@@ -313,7 +325,9 @@ export async function decryptCipher(
     collectionIds: cipher.collectionIds ?? [],
     reprompt: cipher.reprompt === 1,
     viewPassword: cipher.viewPassword !== false,
+    canEdit: cipher.edit !== false && canEncrypt(cipher),
     revisionDate: cipher.revisionDate,
+    deletedDate: cipher.deletedDate ?? null,
     login: cipher.login
       ? {
           username: await maybe(cipher.login.username),
@@ -486,6 +500,9 @@ export function toDetail(
     hasTotp: Boolean(login?.totp),
     reprompt: item.reprompt,
     revisionDate: item.revisionDate,
+    folderId: item.folderId,
+    canEdit: item.canEdit,
+    deletedDate: item.deletedDate,
   };
 }
 

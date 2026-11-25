@@ -1,6 +1,7 @@
-import { ApiClient, ApiError, TwoFactorRequiredError } from '../api';
+import { ApiClient, ApiError, ConflictError, TwoFactorRequiredError } from '../api';
 import {
   TwoFactorProvider,
+  type CipherResponse,
   type DeviceInfo,
   type LoginChallenge,
   type SyncResponse,
@@ -13,6 +14,8 @@ import {
   deriveLoginKeys,
   emailSalt,
   encryptString,
+  generate,
+  generateForRules,
   sdk,
   toBase64,
   unwrapKey,
@@ -25,6 +28,7 @@ import { log } from '../shared/log';
 import type { LoginRequest, VaultStatus } from '../shared/messages';
 import type { SearchIndex } from '../search';
 import type { Account } from '../storage/account';
+import { activeOptions, HISTORY_LIMIT, type StoredGeneratorOptions } from '../storage/generator';
 import type { UnlockedSession } from '../storage/session';
 import {
   decryptCipher,
@@ -36,9 +40,17 @@ import {
   cipherKey,
   type DecryptedCipher,
 } from '../vault/decrypt';
+import { encryptDraft, toDraft } from '../vault/encrypt';
 import type { VaultState } from '../vault/state';
 import { generateTotp, type TotpCode } from '../vault/totp';
-import type { CipherDetail } from '../vault/types';
+import type {
+  CipherDetail,
+  EditableItem,
+  FolderSummary,
+  ItemDraft,
+  PasswordHistoryEntry,
+  TrashItem,
+} from '../vault/types';
 
 export interface ServiceDeps {
   createApi(serverUrl: string): ApiClient;
@@ -64,6 +76,16 @@ export interface ServiceDeps {
     set(serverUrl: string, email: string, token: string | null): Promise<void>;
   };
   device: Omit<DeviceInfo, 'identifier'>;
+  /** Whether the user turned on editing (Phase 2 writes ship behind this setting). */
+  writesEnabled(): Promise<boolean>;
+  /** Generator options and the encrypted history of generated passwords. */
+  generator: {
+    loadOptions(): Promise<StoredGeneratorOptions>;
+    saveOptions(options: StoredGeneratorOptions): Promise<void>;
+    loadHistory(): Promise<string[]>;
+    saveHistory(entries: string[]): Promise<void>;
+    clearHistory(): Promise<void>;
+  };
   now(): number;
   /** Called whenever the status may have changed, so open popups can follow along. */
   onStatus?(status: VaultStatus): void;
@@ -254,6 +276,7 @@ export class VaultService {
     const account = this.vault.currentAccount;
     await this.lock();
     if (account) await this.deps.cache.clear(account.userId);
+    await this.deps.generator.clearHistory();
     await this.deps.account.clear();
     this.vault.setAccount(null);
     this.notify();
@@ -500,6 +523,270 @@ export class VaultService {
     return { fileName: local.fileName, base64: toBase64(plain) };
   }
 
+  // --- Writes (Phase 2) -------------------------------------------------------------------
+  // Every write goes to the server first; local state changes only from the server's answer,
+  // applied to the encrypted cache and decrypted again, so the cache and the view never drift.
+
+  /** Unlocked, with editing turned on: the API client, account, and user key for a write. */
+  private async writer(): Promise<{ api: ApiClient; account: Account; userKey: SymmetricKey }> {
+    await this.ready;
+    const account = this.vault.currentAccount;
+    const userKey = this.vault.key;
+    if (!account || !userKey) throw new CodedError('Vibepass is locked', 'locked');
+    if (!(await this.deps.writesEnabled())) {
+      throw new CodedError('Turn on editing in Settings to change your vault', 'writes-off');
+    }
+    // A sync in flight would replace the view with a copy from before this write.
+    await this.syncing?.catch(() => undefined);
+    return { api: await this.authedApi(account, userKey), account, userKey };
+  }
+
+  /** Apply a change to the cached sync response, then show the result. */
+  private async applyChange(
+    account: Account,
+    change: (sync: SyncResponse) => SyncResponse,
+  ): Promise<void> {
+    const cached = await this.deps.cache.read(account.userId);
+    if (!cached) {
+      await this.runSync(true);
+      return;
+    }
+    const next = change(cached);
+    await this.deps.cache.write(account.userId, next);
+    await this.showVault(next);
+    this.notify();
+  }
+
+  private applyCipher(account: Account, cipher: CipherResponse): Promise<void> {
+    return this.applyChange(account, (sync) => {
+      const index = sync.ciphers.findIndex((c) => c.id === cipher.id);
+      const ciphers = [...sync.ciphers];
+      if (index >= 0) ciphers[index] = { ...ciphers[index], ...cipher };
+      else ciphers.push(cipher);
+      return { ...sync, ciphers };
+    });
+  }
+
+  /** An item, decrypted for the editor. Asks for the master password on re-prompt items. */
+  async editable(id: string, masterPassword?: string): Promise<EditableItem> {
+    const item = await this.decryptItem(id, { masterPassword });
+    if (!item.canEdit) throw new Error('You can’t edit this item');
+    if (item.deletedDate) throw new Error('Restore this item before editing it');
+    return {
+      id: item.id,
+      revisionDate: item.revisionDate,
+      organization: item.organizationId
+        ? (this.vault.organizations.find((o) => o.id === item.organizationId)?.name ?? null)
+        : null,
+      draft: toDraft(item),
+    };
+  }
+
+  /**
+   * Save an item: create it when `id` is null, otherwise update it. `revisionDate` is the copy
+   * the editor started from; if the server or a sync has a newer one, this throws a conflict
+   * unless `overwrite` is set, in which case it syncs and saves over the newest copy.
+   */
+  async saveItem(request: {
+    id: string | null;
+    draft: ItemDraft;
+    revisionDate?: string | undefined;
+    overwrite?: boolean | undefined;
+  }): Promise<string> {
+    const { api, account, userKey } = await this.writer();
+    if (request.overwrite) await this.runSync(true);
+    const base = request.id ? this.vault.raw(request.id) : null;
+    if (request.id && !base) throw new Error('That item is no longer in your vault');
+    if (base && !request.overwrite && request.revisionDate !== base.revisionDate) {
+      throw new ConflictError();
+    }
+    const ownerKey = base ? ownerKeyFor(base, userKey, this.vault.orgKeys) : userKey;
+    if (!ownerKey) throw new Error('This item belongs to an organization you can no longer read');
+    const previous = base ? await decryptCipher(base, ownerKey) : null;
+    if (previous && !previous.canEdit) throw new Error('You can’t edit this item');
+    if (
+      request.draft.folderId &&
+      !this.vault.folders.some((f) => f.id === request.draft.folderId)
+    ) {
+      throw new Error('That folder no longer exists');
+    }
+    const body = await encryptDraft(request.draft, base, previous, {
+      ownerKey,
+      userId: account.userId,
+      now: new Date(this.deps.now()),
+    });
+    const saved =
+      base && request.id ? await api.updateCipher(request.id, body) : await api.createCipher(body);
+    await this.applyCipher(account, saved);
+    return saved.id;
+  }
+
+  /**
+   * A login's username and password, for the worker's own comparisons (is this submitted login
+   * already saved?). Never returned to a page or the popup.
+   */
+  async credentials(id: string): Promise<{ username: string | null; password: string | null }> {
+    const item = await this.decryptItem(id, null);
+    return { username: item.login?.username ?? null, password: item.login?.password ?? null };
+  }
+
+  /** Change only a login's password (from the update banner), keeping the old one in history. */
+  async updatePassword(id: string, password: string): Promise<void> {
+    const item = await this.decryptItem(id, null);
+    if (!item.login) throw new Error('Only logins have a password to update');
+    const draft = toDraft(item);
+    if (draft.login) draft.login.password = password;
+    await this.saveItem({ id, draft, revisionDate: item.revisionDate });
+  }
+
+  /** Favorite or move an item without re-encrypting it. */
+  async organize(
+    id: string,
+    patch: { favorite?: boolean | undefined; folderId?: string | null | undefined },
+  ): Promise<void> {
+    const { api, account } = await this.writer();
+    const raw = this.vault.raw(id);
+    if (!raw) throw new Error('That item is no longer in your vault');
+    const folderId = patch.folderId === undefined ? raw.folderId : patch.folderId;
+    if (folderId && !this.vault.folders.some((f) => f.id === folderId)) {
+      throw new Error('That folder no longer exists');
+    }
+    const saved = await api.updateCipherPartial(id, {
+      folderId,
+      favorite: patch.favorite ?? raw.favorite,
+    });
+    // Some servers answer the partial update with a thin copy; keep what it leaves out.
+    await this.applyCipher(account, { ...raw, ...saved, folderId, favorite: saved.favorite });
+  }
+
+  /** Move an item to the trash; it can be restored from there. */
+  async trashItem(id: string): Promise<void> {
+    const { api, account } = await this.writer();
+    const raw = this.vault.raw(id);
+    if (!raw) throw new Error('That item is no longer in your vault');
+    if (raw.edit === false) throw new Error('You can’t delete this item');
+    await api.softDeleteCipher(id);
+    await this.applyCipher(account, {
+      ...raw,
+      deletedDate: new Date(this.deps.now()).toISOString(),
+    });
+  }
+
+  async restoreItem(id: string): Promise<void> {
+    const { api, account } = await this.writer();
+    const raw = this.vault.raw(id);
+    if (!raw) throw new Error('That item is no longer in your vault');
+    const restored = await api.restoreCipher(id);
+    await this.applyCipher(account, { ...raw, ...restored, deletedDate: null });
+  }
+
+  /** Delete an item for good. Only from the trash, so one click can't lose an item. */
+  async deleteItem(id: string): Promise<void> {
+    const { api, account } = await this.writer();
+    const raw = this.vault.raw(id);
+    if (!raw) throw new Error('That item is no longer in your vault');
+    if (!raw.deletedDate) throw new Error('Move the item to the trash first');
+    await api.deleteCipher(id);
+    await this.applyChange(account, (sync) => ({
+      ...sync,
+      ciphers: sync.ciphers.filter((c) => c.id !== id),
+    }));
+  }
+
+  trash(): readonly TrashItem[] {
+    return this.vault.trash;
+  }
+
+  folders(): readonly FolderSummary[] {
+    return this.vault.folders;
+  }
+
+  async createFolder(name: string): Promise<FolderSummary> {
+    const { api, account, userKey } = await this.writer();
+    const clean = folderName(name);
+    const folder = await api.createFolder({ name: await encryptString(clean, userKey) });
+    await this.applyChange(account, (sync) => ({ ...sync, folders: [...sync.folders, folder] }));
+    return { id: folder.id, name: clean };
+  }
+
+  async renameFolder(id: string, name: string): Promise<void> {
+    const { api, account, userKey } = await this.writer();
+    if (!this.vault.folders.some((f) => f.id === id)) throw new Error('That folder is gone');
+    const folder = await api.updateFolder(id, {
+      name: await encryptString(folderName(name), userKey),
+    });
+    await this.applyChange(account, (sync) => ({
+      ...sync,
+      folders: sync.folders.map((f) => (f.id === id ? { ...f, ...folder } : f)),
+    }));
+  }
+
+  /** Delete a folder. Its items stay in the vault, with no folder. */
+  async deleteFolder(id: string): Promise<void> {
+    const { api, account } = await this.writer();
+    await api.deleteFolder(id);
+    await this.applyChange(account, (sync) => ({
+      ...sync,
+      folders: sync.folders.filter((f) => f.id !== id),
+      ciphers: sync.ciphers.map((c) => (c.folderId === id ? { ...c, folderId: null } : c)),
+    }));
+  }
+
+  // --- Generator --------------------------------------------------------------------------
+
+  generatorOptions(): Promise<StoredGeneratorOptions> {
+    return this.deps.generator.loadOptions();
+  }
+
+  /**
+   * Generate a password with the given options (remembered as the last used), or the last used
+   * ones, or a site's `passwordrules`. Every result goes into the encrypted history first, so
+   * a save that fails later never loses it.
+   */
+  async generatePassword(
+    request: { options?: StoredGeneratorOptions | undefined; rules?: string | null } = {},
+  ): Promise<string> {
+    await this.ready;
+    const userKey = this.vault.key;
+    if (!userKey) throw new CodedError('Vibepass is locked', 'locked');
+    if (request.options) await this.deps.generator.saveOptions(request.options);
+    const stored = request.options ?? (await this.deps.generator.loadOptions());
+    const password =
+      request.rules === undefined
+        ? await generate(activeOptions(stored))
+        : await generateForRules(request.rules, activeOptions(stored));
+    const entry = JSON.stringify({
+      password,
+      lastUsedDate: new Date(this.deps.now()).toISOString(),
+    });
+    const history = await this.deps.generator.loadHistory();
+    await this.deps.generator.saveHistory(
+      [await encryptString(entry, userKey), ...history].slice(0, HISTORY_LIMIT),
+    );
+    return password;
+  }
+
+  /** Generated passwords, newest first. Entries we can't read (another account) are skipped. */
+  async generatorHistory(): Promise<PasswordHistoryEntry[]> {
+    await this.ready;
+    const userKey = this.vault.key;
+    if (!userKey) throw new CodedError('Vibepass is locked', 'locked');
+    const entries: PasswordHistoryEntry[] = [];
+    for (const enc of await this.deps.generator.loadHistory()) {
+      try {
+        const value = JSON.parse(await decryptString(enc, userKey)) as PasswordHistoryEntry;
+        if (typeof value.password === 'string') entries.push(value);
+      } catch {
+        // Skip it.
+      }
+    }
+    return entries;
+  }
+
+  async clearGeneratorHistory(): Promise<void> {
+    await this.deps.generator.clearHistory();
+  }
+
   /** After a worker restart: reload the account, and the unlocked session if there is one. */
   private async restore(): Promise<void> {
     const account = await this.deps.account.load();
@@ -512,4 +799,12 @@ export class VaultService {
     const cached = await this.deps.cache.read(account.userId);
     if (cached) await this.showVault(cached);
   }
+}
+
+/** Folder names are short labels; Bitwarden nests folders with "/" in the name. */
+function folderName(name: string): string {
+  const clean = name.trim();
+  if (!clean) throw new Error('Give the folder a name');
+  if (clean.length > 200) throw new Error('That folder name is too long');
+  return clean;
 }

@@ -9,3 +9,4 @@ export * from './types';
 export * from './kdf';
 export * from './keys';
 export { sdk, setWasmSource, SDK_WASM_PATH } from './sdk';
+export * from './generator';

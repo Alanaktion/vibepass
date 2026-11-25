@@ -20,14 +20,14 @@ menu, message protocol) is ours.
 The phased plan, milestones, and exit criteria live in [docs/PLAN.md](docs/PLAN.md). Keep its
 status notes current when you finish a milestone.
 
-| Phase            | Goal                                     | State (2026-11-25)                                            |
-| ---------------- | ---------------------------------------- | ------------------------------------------------------------- |
-| 0. Spike         | Log in, sync, decrypt a real vault       | Done on Vaultwarden; self-hosted Bitwarden still to verify    |
-| 1. MVP           | Read-only daily driver                   | Built; Alan's 2-week daily-use trial is the exit gate         |
-| 2. Write support | Save, update, edit, generate, organize   | **Next.** Gated on encrypt round-trips (see below)            |
-| 3. Beta          | Quality, breadth, security for others    | Milestones 1-2 in basic form (inline menu, multi-step logins) |
-| 4. v1            | Chrome Web Store and Firefox Add-ons     | Not started                                                   |
-| Later            | Passkeys, cards/identities, Safari, etc. | Driven by beta feedback                                       |
+| Phase            | Goal                                     | State (2026-11-25)                                         |
+| ---------------- | ---------------------------------------- | ---------------------------------------------------------- |
+| 0. Spike         | Log in, sync, decrypt a real vault       | Done on Vaultwarden; self-hosted Bitwarden still to verify |
+| 1. MVP           | Read-only daily driver                   | Built; Alan's 2-week daily-use trial is the exit gate      |
+| 2. Write support | Save, update, edit, generate, organize   | Built behind a setting; Alan's lifecycle trial is the gate |
+| 3. Beta          | Quality, breadth, security for others    | Milestones 1-2 in basic form (inline menu, form types)     |
+| 4. v1            | Chrome Web Store and Firefox Add-ons     | Not started                                                |
+| Later            | Passkeys, cards/identities, Safari, etc. | Driven by beta feedback                                    |
 
 Known gaps carried forward: a live check against self-hosted Bitwarden, Firefox live testing of
 the Phase 1 features and inline menu, running the live check in CI, the notifications hub (sync
@@ -35,9 +35,11 @@ polls instead), WebAuthn and Duo two-step login, equivalent domains, and the aut
 
 Rules that hold in every phase:
 
-- **Read-only until proven.** No code path writes to a vault until encrypt/decrypt round-trips
-  match the official clients. Phase 2 writes ship behind a setting until that gate is green, and
-  must preserve cipher fields Vibepass doesn't understand, so editing never drops data.
+- **Writes are proven, then opt-in.** Every write path re-encrypts from the server's copy and
+  keeps cipher fields Vibepass doesn't understand, so editing never drops data
+  ([ADR 0002](docs/adr/0002-write-path.md)). `tests/encrypt.test.ts` checks round trips with
+  Bitwarden's own cipher code; never weaken it. Writes stay behind the off-by-default
+  `allowEdits` setting, checked in the worker.
 - **Both servers, always.** Server-facing features are tested against Bitwarden and Vaultwarden.
 - **Secrets stay in the worker** (see Security rules).
 - **Budgets are tests.** Search under 100 ms on 5,000 items; unlock to filled form under 3 s.
@@ -54,23 +56,26 @@ src/
     index.ts     Registers listeners (messages, alarms, commands)
     router.ts    Typed dispatch; always replies { ok, data | error }; rejects other extensions
     handlers.ts  One thin handler per message type
-    service.ts   VaultService: owns the order of operations (login, unlock, sync, lock)
-    autofill.ts  Fill on gesture: page check, URI match, send to the tab's top frame
+    service.ts   VaultService: owns the order of operations (login, unlock, sync, lock, writes)
+    autofill.ts  Fill on gesture, and the save/update banner's decisions
     autolock.ts  Idle and system-lock auto-lock
     clipboard.ts Clears copied secrets after the timeout
-  popup/       Preact UI: setup (with two-step login), lock, quick find, item view, settings
-  content/     Content script: login field detection, filling, inline menu (menu.ts)
+  popup/       Preact UI: setup, lock, quick find, item view, editor, generator, folders, trash,
+               settings
+  content/     Content script: field detection, filling, inline menu (menu.ts), save banner
+               (banner.ts)
   offscreen/   Chrome-only offscreen document that writes the clipboard for the worker
-  api/         Bitwarden server API client: prelogin, token login/refresh, sync
-  crypto/      Thin wrapper over Bitwarden's SDK (WASM): KDF, user key, EncString
+  api/         Bitwarden server API client: login, sync, cipher and folder writes
+  crypto/      Thin wrapper over Bitwarden's SDK (WASM): KDF, keys, EncString, generator
   storage/     Settings (storage.local), session key (storage.session), vault cache (IndexedDB)
   search/      MiniSearch quick find, current site first
-  vault/       VaultState, decryption, URI matching (tldts / public suffix list), TOTP
+  vault/       VaultState, decryption, encryption (encrypt.ts), URI matching (tldts), TOTP
   shared/      Message protocol, messaging helper, browser wrapper, errors, logger
 scripts/
   build.mjs    One Vite build per entry point, then writes manifest.json per browser
   manifest.mjs Generates the Chrome and Firefox manifests
-  dev/         Local Vaultwarden helpers: register, seed, live-check, inline-menu-check
+  dev/         Local Vaultwarden helpers: register, seed, live-check, inline-menu-check,
+               write-check
 tests/         Vitest (happy-dom) tests and fixtures
 docs/          PLAN.md (phased plan) and adr/ (architecture decisions)
 ```
@@ -94,7 +99,9 @@ Errors the UI must react to (two-step login, re-prompt, fill mismatch, locked) a
 Crypto comes from `@bitwarden/sdk-internal` (GPL-3.0), **pinned to an exact version**. Only its
 stateless `PureCrypto` API is used, and only from inside `src/crypto/`; the rest of the code
 imports `src/crypto` and never the SDK directly. Do not adopt the SDK's state, sync, or client
-layers: they would dictate how the UI behaves. Two pieces stay on Web Crypto because `PureCrypto`
+layers: they would dictate how the UI behaves. The one exception is the password generator
+(`src/crypto/generator.ts`), reached through an SDK client that never gets keys or vault data.
+Tests may use the SDK's stateful `CiphersClient` as an oracle for the official clients. Two pieces stay on Web Crypto because `PureCrypto`
 doesn't expose them (the master password hash and the HKDF stretch). Rationale and fallback plan
 are in [docs/adr/0001-crypto-sdk.md](docs/adr/0001-crypto-sdk.md).
 
@@ -131,6 +138,8 @@ These are not style preferences. A change that breaks one is a bug.
   `optional_host_permissions`; `privacy` only when the user turns off the browser's password
   manager. Justify any new permission in the commit message.
 - The refresh token is stored encrypted with the user key.
+- The save banner gets a submitted password from the page only when the worker says saving is
+  on; it waits in worker memory (never on disk) until the user answers, and is dropped on lock.
 - Ask Alan before landing anything risky: changes to crypto, the write path, or permissions.
 
 ## How to code here
@@ -188,11 +197,14 @@ node scripts/dev/seed-vault.mjs http://127.0.0.1:8000 live@example.test 'live te
 npm run build:chrome
 node scripts/dev/live-check.mjs http://127.0.0.1:8000 live@example.test 'live test password'
 node scripts/dev/inline-menu-check.mjs http://127.0.0.1:8000 live@example.test 'live test password'
+node scripts/dev/write-check.mjs http://127.0.0.1:8000 live@example.test 'live test password'
 ```
 
 See the README for the full Docker command. Vaultwarden rate-limits logins (about 10 a minute),
-so wait between repeated runs, and run with `NO_PROXY='*'` behind a proxy. Run the live checks
-for changes to login, sync, unlock, autofill, or the inline menu.
+so wait between repeated runs (or start it with `-e LOGIN_RATELIMIT_MAX_BURST=1000`), and run
+with `NO_PROXY='*'` behind a proxy. Run the live checks for changes to login, sync, unlock,
+autofill, the inline menu, or anything that writes (`write-check.mjs` writes to the vault, so
+only against a throwaway server).
 
 ## Workflow
 

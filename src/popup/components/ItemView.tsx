@@ -1,9 +1,24 @@
-import { ArrowLeft, Copy, Download, Eye, EyeOff } from 'lucide-preact';
+import {
+  ArrowLeft,
+  Copy,
+  Download,
+  Eye,
+  EyeOff,
+  Pencil,
+  RotateCcw,
+  Star,
+  Trash2,
+} from 'lucide-preact';
 import { useEffect, useState } from 'preact/hooks';
 import { sendMessage } from '../../shared/messaging';
 import { displayHost, toWebUrl } from '../../vault/uri';
 import type { TotpCode } from '../../vault/totp';
-import { CipherType, type CipherDetail, type DetailField } from '../../vault/types';
+import {
+  CipherType,
+  type CipherDetail,
+  type DetailField,
+  type FolderSummary,
+} from '../../vault/types';
 import { fillItem, pw } from '../actions';
 import { usePopup, type PopupContext } from '../context';
 import { copyText, downloadBase64, errorMessage, iconUrl, withReprompt } from '../lib';
@@ -13,13 +28,16 @@ import { IconButton } from './IconButton';
 interface Props {
   id: string;
   onBack: () => void;
+  /** Open the editor for this item (only offered when editing is turned on). */
+  onEdit: (id: string) => void;
 }
 
 /** Item detail: large title, labeled fields with copy and reveal, websites, notes, files. */
-export function ItemView({ id, onBack }: Props) {
+export function ItemView({ id, onBack, onEdit }: Props) {
   const ctx = usePopup();
   const [item, setItem] = useState<CipherDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const writable = Boolean(ctx.settings?.allowEdits && item?.canEdit && !item.deletedDate);
 
   useEffect(() => {
     let cancelled = false;
@@ -35,22 +53,26 @@ export function ItemView({ id, onBack }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [id, ctx.status.lastSync]);
+  }, [id, ctx.status.version]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const typing =
         e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
+      if (document.querySelector('.dialog') || e.target instanceof HTMLSelectElement) return;
       if (e.key === 'Escape' || (!typing && (e.key === 'ArrowLeft' || e.key === 'Backspace'))) {
         e.preventDefault();
         onBack();
+      } else if (!typing && e.key === 'e' && !e.metaKey && !e.ctrlKey && writable) {
+        e.preventDefault();
+        onEdit(id);
       }
     };
     document.addEventListener('keydown', onKey);
     return () => {
       document.removeEventListener('keydown', onKey);
     };
-  }, [onBack]);
+  }, [onBack, onEdit, id, writable]);
 
   const host = item ? displayHost(item.uris) : null;
   const canFill = item?.type === CipherType.Login && Boolean(ctx.tab?.url);
@@ -66,7 +88,27 @@ export function ItemView({ id, onBack }: Props) {
           />
         )}
         <h1 class="grow title">{item?.name ?? ''}</h1>
-        {item && canFill && (
+        {item && writable && (
+          <>
+            <IconButton
+              icon={Star}
+              label={item.favorite ? 'Remove from favorites' : 'Add to favorites'}
+              aria-pressed={item.favorite}
+              onClick={() => {
+                void organize(ctx, item.id, { favorite: !item.favorite });
+              }}
+            />
+            <IconButton
+              icon={Pencil}
+              label="Edit"
+              title="Edit (E)"
+              onClick={() => {
+                onEdit(item.id);
+              }}
+            />
+          </>
+        )}
+        {item && canFill && !item.deletedDate && (
           <button
             type="button"
             class="fill"
@@ -84,8 +126,142 @@ export function ItemView({ id, onBack }: Props) {
         </p>
       )}
       {!item && !error && <p class="muted" aria-busy="true" />}
+      {item?.deletedDate && <TrashBanner item={item} ctx={ctx} onGone={onBack} />}
       {item && <Detail item={item} ctx={ctx} />}
+      {item && writable && <Organize item={item} ctx={ctx} onTrashed={onBack} />}
     </main>
+  );
+}
+
+async function organize(
+  ctx: PopupContext,
+  id: string,
+  patch: { favorite?: boolean; folderId?: string | null },
+): Promise<boolean> {
+  try {
+    await sendMessage('vault:organize', { id, ...patch });
+    return true;
+  } catch (error) {
+    ctx.toast(errorMessage(error, 'Could not save'));
+    return false;
+  }
+}
+
+/** Folder and trash, under the item's fields. */
+function Organize({
+  item,
+  ctx,
+  onTrashed,
+}: {
+  item: CipherDetail;
+  ctx: PopupContext;
+  onTrashed: () => void;
+}) {
+  const [folders, setFolders] = useState<FolderSummary[]>([]);
+  useEffect(() => {
+    sendMessage('vault:folders').then(setFolders, () => undefined);
+  }, [ctx.status.version]);
+
+  return (
+    <div class="row organize">
+      <label class="grow inline">
+        <span class="muted small">Folder</span>
+        <select
+          value={item.folderId ?? ''}
+          onChange={(e) => {
+            const folderId = e.currentTarget.value || null;
+            void organize(ctx, item.id, { folderId }).then((ok) => {
+              if (ok) ctx.toast(folderId ? 'Moved' : 'Removed from folder');
+            });
+          }}
+        >
+          <option value="">No folder</option>
+          {folders.map((f) => (
+            <option key={f.id} value={f.id}>
+              {f.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <button
+        type="button"
+        class="ghost danger"
+        onClick={() => {
+          void ctx
+            .confirm(
+              `Move “${item.name}” to the trash? You can restore it from there.`,
+              'Move to trash',
+            )
+            .then(async (ok) => {
+              if (!ok) return;
+              try {
+                await sendMessage('vault:trash-item', { id: item.id });
+                ctx.toast('Moved to trash');
+                onTrashed();
+              } catch (error) {
+                ctx.toast(errorMessage(error, 'Could not delete'));
+              }
+            });
+        }}
+      >
+        <Trash2 size={14} aria-hidden="true" /> Move to trash
+      </button>
+    </div>
+  );
+}
+
+function TrashBanner({
+  item,
+  ctx,
+  onGone,
+}: {
+  item: CipherDetail;
+  ctx: PopupContext;
+  onGone: () => void;
+}) {
+  const writable = Boolean(ctx.settings?.allowEdits && item.canEdit);
+  return (
+    <div class="banner info row">
+      <span class="grow">
+        In the trash since {new Date(item.deletedDate ?? '').toLocaleDateString()}
+      </span>
+      {writable && (
+        <>
+          <IconButton
+            icon={RotateCcw}
+            label="Restore"
+            onClick={() => {
+              sendMessage('vault:restore', { id: item.id }).then(
+                () => {
+                  ctx.toast('Item restored');
+                },
+                (error: unknown) => {
+                  ctx.toast(errorMessage(error, 'Could not restore'));
+                },
+              );
+            }}
+          />
+          <IconButton
+            icon={Trash2}
+            label="Delete for good"
+            onClick={() => {
+              void ctx
+                .confirm(`Delete “${item.name}” for good? This can’t be undone.`, 'Delete for good')
+                .then(async (ok) => {
+                  if (!ok) return;
+                  try {
+                    await sendMessage('vault:delete-forever', { id: item.id });
+                    ctx.toast('Item deleted for good');
+                    onGone();
+                  } catch (error) {
+                    ctx.toast(errorMessage(error, 'Could not delete'));
+                  }
+                });
+            }}
+          />
+        </>
+      )}
+    </div>
   );
 }
 

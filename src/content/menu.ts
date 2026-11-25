@@ -9,7 +9,10 @@
 import type { InlineMenuItem } from '../shared/messages';
 
 export type MenuRow =
-  { kind: 'item'; item: InlineMenuItem } | { kind: 'unlock' } | { kind: 'message'; text: string };
+  | { kind: 'item'; item: InlineMenuItem }
+  | { kind: 'unlock' }
+  | { kind: 'generate' }
+  | { kind: 'message'; text: string };
 
 export interface MenuCallbacks {
   onPick(row: MenuRow): void;
@@ -56,6 +59,9 @@ const STYLE = `
 
 function rowLabel(row: MenuRow): { name: string; sub: string | null } {
   if (row.kind === 'unlock') return { name: 'Unlock Vibepass', sub: 'to fill a login here' };
+  if (row.kind === 'generate') {
+    return { name: 'Use a strong password', sub: 'Vibepass makes one and remembers it' };
+  }
   if (row.kind === 'message') return { name: row.text, sub: null };
   const { item } = row;
   const parts = [item.username ?? ''];

@@ -114,14 +114,13 @@ describe('autofill', () => {
           recent: false,
         },
       ],
+      canGenerate: true,
+      offerToSave: false,
     });
     expect(JSON.stringify(state)).not.toContain(loginItem.password);
-    expect(await autofill.menu(7, 'https://other.test/')).toEqual({ state: 'unlocked', items: [] });
+    expect(await autofill.menu(7, 'https://other.test/')).toMatchObject({ items: [] });
     // https logins are never offered to an http page.
-    expect(await autofill.menu(7, 'http://www.example.com/')).toEqual({
-      state: 'unlocked',
-      items: [],
-    });
+    expect(await autofill.menu(7, 'http://www.example.com/')).toMatchObject({ items: [] });
   });
 
   it('says locked or off instead of listing', async () => {
@@ -167,5 +166,94 @@ describe('autofill', () => {
     clock.time += RECENT_FILL_MS + 1;
     const later = await autofill.menu(7, 'https://www.example.com/');
     expect(later.state === 'unlocked' && later.items[0]?.recent).toBe(false);
+  });
+
+  describe('save and update banner', () => {
+    const editing = { ...DEFAULT_SETTINGS, allowEdits: true };
+    const page = 'https://login.example.com/signin';
+
+    it('stays quiet while editing is off, or when the login is already saved', async () => {
+      const off = await setup(page);
+      const login = { username: 'new@example.com', password: 'pw', newPassword: null };
+      expect(await off.autofill.submitted(7, page, login)).toBeNull();
+
+      const { autofill } = await setup(page, undefined, editing);
+      expect(
+        await autofill.submitted(7, page, {
+          username: loginItem.username!,
+          password: loginItem.password!,
+          newPassword: null,
+        }),
+      ).toBeNull();
+    });
+
+    it('offers to save a new login, and saves it without the page seeing the password', async () => {
+      const { autofill, service } = await setup(page, undefined, editing);
+      const prompt = await autofill.submitted(7, page, {
+        username: 'second@example.com',
+        password: 'second-password',
+        newPassword: null,
+      });
+      expect(prompt).toEqual({
+        kind: 'save',
+        host: 'login.example.com',
+        username: 'second@example.com',
+        suggestedName: 'login.example.com',
+      });
+      expect(JSON.stringify(prompt)).not.toContain('second-password');
+      // The form navigated: the next page on the same site shows the same banner.
+      expect(autofill.pendingPrompt(7, 'https://www.example.com/home')).toEqual(prompt);
+      expect(autofill.pendingPrompt(7, 'https://evil.test/')).toBeNull();
+      expect(autofill.pendingPrompt(8, page)).toBeNull();
+
+      await expect(
+        autofill.answer(7, 'https://evil.test/', { action: 'save', name: 'x' }),
+      ).rejects.toThrow('Nothing to save');
+      const result = await autofill.answer(7, page, { action: 'save', name: 'Example 2' });
+      expect(result.message).toBe('Saved to Vibepass');
+      const saved = (await autofill.menu(7, page)) as { items: { id: string; name: string }[] };
+      const item = saved.items.find((i) => i.name === 'Example 2')!;
+      expect(await service.reveal(item.id, 'login.password')).toBe('second-password');
+      expect(autofill.pendingPrompt(7, page)).toBeNull();
+    });
+
+    it('offers to update the password of the login with that username', async () => {
+      const { autofill, service } = await setup(page, undefined, editing);
+      const prompt = await autofill.submitted(7, page, {
+        username: loginItem.username!,
+        password: 'changed elsewhere',
+        newPassword: null,
+      });
+      expect(prompt).toMatchObject({
+        kind: 'update',
+        items: [{ id: loginId, name: loginItem.name }],
+      });
+      await expect(autofill.answer(7, page, { action: 'update', id: 'other' })).rejects.toThrow();
+      await autofill.answer(7, page, { action: 'update', id: loginId });
+      expect(await service.reveal(loginId, 'login.password')).toBe('changed elsewhere');
+    });
+
+    it('a password change form finds the login by its old password', async () => {
+      const { autofill } = await setup(page, undefined, editing);
+      const prompt = await autofill.submitted(7, page, {
+        username: null,
+        password: loginItem.password!,
+        newPassword: 'the new one',
+      });
+      expect(prompt).toMatchObject({ kind: 'update', items: [{ id: loginId }] });
+    });
+
+    it('never again for a site, and nothing after the vault locks', async () => {
+      const { autofill, service } = await setup(page, undefined, editing);
+      const login = { username: 'x@example.com', password: 'pw-x', newPassword: null };
+      await autofill.submitted(7, page, login);
+      await autofill.answer(7, page, { action: 'never' });
+      expect(await autofill.submitted(7, page, login)).toBeNull();
+
+      const other = 'https://other.test/';
+      await autofill.submitted(7, other, login);
+      await service.lock();
+      expect(autofill.pendingPrompt(7, other)).toBeNull();
+    });
   });
 });
