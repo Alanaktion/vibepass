@@ -56,21 +56,34 @@ Vaultwarden, and show it in a read-only popup.
 
 ### Decisions to make first
 
-1. **SDK or reimplement.** Check the license and bundle size of Bitwarden's official SDK (WASM).
-   If it fits our license plans and MV3 constraints, using it for crypto cuts the biggest risk.
-   If not, reimplement against test vectors. Record the decision in `docs/adr/`.
-2. **Argon2 WASM build.** Pick a pinned, auditable Argon2id WASM package that runs under our CSP
-   in both browsers.
-3. **License** for the repo, since it affects the SDK choice.
+**Decided (2026-11-24): reuse Bitwarden's SDK for crypto.** The goal is a 1Password-like
+experience on the Bitwarden core, so reusing proven code is preferred wherever it does not limit
+the UX. The SDK sits behind `src/crypto/` (and, where it helps, parts of `src/api/`) as an
+implementation detail; the UI, search, autofill engine, and message protocol stay ours.
+
+1. **Confirm the SDK can be used.** Before writing code against it, check which Bitwarden SDK
+   package fits (the internal client SDK vs. the public one), its license terms for a
+   third-party client, and whether it builds for the browser as WASM. If the license or
+   packaging rules it out, fall back to reimplementing crypto against test vectors. Record the
+   outcome in `docs/adr/0001-crypto-sdk.md`.
+2. **Fit it to MV3.** Confirm the WASM loads under our CSP (`'wasm-unsafe-eval'` only), in the
+   Chrome service worker and Firefox background script, and measure bundle size and init time
+   against the 3 s unlock-to-fill budget. If the SDK covers Argon2id, no separate Argon2 package
+   is needed.
+3. **Keep the UX unconstrained.** Use the SDK for key derivation, EncString encrypt/decrypt, and
+   key management. Do not adopt its state or sync layers if they would dictate how the popup,
+   search, or autofill behave.
+4. **License** for the repo, chosen to be compatible with the SDK's terms.
 
 ### Milestones
 
 1. **Test harness.** Docker Compose for local Bitwarden (self-hosted) and Vaultwarden, seeded
    with a test account and a known vault. Test vectors exported from the official clients under
    `tests/crypto/vectors/`.
-2. **Crypto core** (`src/crypto/`): PBKDF2-SHA256 and Argon2id master key derivation, HKDF key
-   stretching, EncString parse/decrypt for type 2 (AES-256-CBC + HMAC-SHA256), user key
-   unwrapping, and RSA private key decrypt for organization keys. All verified against vectors.
+2. **Crypto core** (`src/crypto/`): a thin wrapper over the SDK for PBKDF2-SHA256 and Argon2id
+   master key derivation, key stretching, EncString decrypt, user key unwrapping, and
+   organization key decrypt. Our own tests still check the wrapper against official-client
+   vectors, so an SDK upgrade that changes behavior fails CI.
 3. **API client** (`src/api/`): prelogin, token login (password grant), refresh, sync, and a
    clear error for 2FA challenges (full 2FA UI comes in Phase 1).
 4. **Unlock flow** in the worker: setup screen saves server URL and email, requests host
@@ -254,7 +267,7 @@ budget regresses.
 
 ## Open questions
 
-- SDK reuse or reimplementation (decide in Phase 0).
+- Which SDK package and whether its license allows a third-party client (check first in Phase 0).
 - Project license (decide in Phase 0).
 - Free or paid.
 - Whether to support Safari, and how much to invest in passkeys.
