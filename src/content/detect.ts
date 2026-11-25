@@ -1,7 +1,8 @@
 /**
- * Login form detection for standard single-page logins: a username (or email) field and a
- * password field, plus one-time code fields. Heuristics only, no site-specific rules yet
- * (those come with per-site overrides in Phase 3).
+ * Login form detection: a username (or email) field and a password field, plus one-time code
+ * fields. Covers single-page logins, multi-step logins (a username step, then a password step),
+ * and split logins (username and password in separate forms). Heuristics only, no site-specific
+ * rules yet (those come with per-site overrides in Phase 3).
  */
 
 export interface LoginFields {
@@ -52,7 +53,7 @@ function hints(input: HTMLInputElement): string {
   return [
     input.name,
     input.id,
-    input.getAttribute('autocomplete') ?? '',
+    autocomplete(input),
     input.placeholder,
     input.getAttribute('aria-label') ?? '',
     label,
@@ -78,8 +79,38 @@ export function isUsable(input: HTMLInputElement): boolean {
   return true;
 }
 
+/**
+ * The page's own autocomplete value, from before the inline menu turned the browser's form
+ * history off on that field, so detection sees what the page meant.
+ */
+const originalAutocomplete = new WeakMap<HTMLInputElement, string | null>();
+
 function autocomplete(input: HTMLInputElement): string {
-  return (input.getAttribute('autocomplete') ?? '').toLowerCase();
+  const original = originalAutocomplete.has(input)
+    ? originalAutocomplete.get(input)
+    : input.getAttribute('autocomplete');
+  return (original ?? '').toLowerCase();
+}
+
+/** A field's autocomplete value as the page set it, lowercased. */
+export function fieldAutocomplete(input: HTMLInputElement): string {
+  return autocomplete(input);
+}
+
+/** Hide the browser's own form-history dropdown on a field while the inline menu is open. */
+export function suppressBrowserAutocomplete(input: HTMLInputElement): void {
+  if (originalAutocomplete.has(input)) return;
+  originalAutocomplete.set(input, input.getAttribute('autocomplete'));
+  input.setAttribute('autocomplete', 'off');
+}
+
+/** Put the page's autocomplete value back exactly as it was. */
+export function restoreBrowserAutocomplete(input: HTMLInputElement): void {
+  if (!originalAutocomplete.has(input)) return;
+  const original = originalAutocomplete.get(input) ?? null;
+  originalAutocomplete.delete(input);
+  if (original === null) input.removeAttribute('autocomplete');
+  else input.setAttribute('autocomplete', original);
 }
 
 export function isTotpField(input: HTMLInputElement): boolean {
@@ -121,10 +152,12 @@ export function detectLoginFields(root: Document = document): LoginFields {
 
   let username: HTMLInputElement | null = null;
   const scope = password ? inputs.slice(0, inputs.indexOf(password)) : inputs;
-  const candidates = scope.filter(
-    (i) => isUsernameCandidate(i) && (!password?.form || i.form === password.form),
-  );
+  const all = scope.filter(isUsernameCandidate);
   if (password) {
+    const sameForm = all.filter((i) => !password.form || i.form === password.form);
+    // Split login: the username sits in another form (or outside it), so only take a field
+    // whose type, autocomplete, name, or label says it's a username or email.
+    const candidates = sameForm.length > 0 ? sameForm : all.filter((i) => usernameScore(i) >= 2);
     // Closest preceding candidate wins ties, so a search box at the top doesn't.
     let best = -1;
     for (const candidate of candidates) {
@@ -135,8 +168,11 @@ export function detectLoginFields(root: Document = document): LoginFields {
       }
     }
   } else {
-    // Username-only step (no password field yet): only fill a field that clearly asks for it.
-    username = candidates.find((i) => usernameScore(i) >= 3) ?? null;
+    // Username-only step of a multi-step login (no password field yet): only fill a field that
+    // clearly asks for it, or the one field whose name or label says "user" or "login".
+    const hinted = all.filter((i) => usernameScore(i) === 2);
+    username =
+      all.find((i) => usernameScore(i) >= 3) ?? (hinted.length === 1 ? (hinted[0] ?? null) : null);
   }
 
   const totp = inputs.find((i) => i !== username && isTotpField(i)) ?? null;

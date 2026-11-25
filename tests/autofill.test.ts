@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createAutofill } from '../src/background/autofill';
+import { createAutofill, RECENT_FILL_MS } from '../src/background/autofill';
 import { createSearchIndex } from '../src/search';
 import type { ContentRequest } from '../src/shared/messages';
 import { DEFAULT_SETTINGS } from '../src/storage/settings';
@@ -17,7 +17,12 @@ const LOGIN = {
   masterPassword: fixture.password,
 };
 
-async function setup(pageUrl: string, fields = { username: true, password: true, totp: false }) {
+async function setup(
+  pageUrl: string,
+  fields = { username: true, password: true, totp: false },
+  settings = DEFAULT_SETTINGS,
+  now?: () => number,
+) {
   const vault = new VaultState();
   const search = createSearchIndex();
   const { service } = createTestService(vault, search, fakeServer(fixture));
@@ -38,7 +43,8 @@ async function setup(pageUrl: string, fields = { username: true, password: true,
     service,
     tabs,
     copy,
-    settings: () => Promise.resolve(DEFAULT_SETTINGS),
+    settings: () => Promise.resolve(settings),
+    ...(now ? { now } : {}),
   });
   return { autofill, sent, copy, tabs, service };
 }
@@ -92,5 +98,74 @@ describe('autofill', () => {
   it('defers to the popup when nothing matches', async () => {
     const { autofill } = await setup('https://other.test/');
     expect(await autofill.fillBest(7)).toBe(false);
+  });
+
+  it('lists matching logins for the inline menu, without secrets', async () => {
+    const { autofill } = await setup('https://www.example.com/');
+    const state = await autofill.menu(7, 'https://www.example.com/login');
+    expect(state).toEqual({
+      state: 'unlocked',
+      items: [
+        {
+          id: loginId,
+          name: loginItem.name,
+          username: loginItem.username,
+          reprompt: false,
+          recent: false,
+        },
+      ],
+    });
+    expect(JSON.stringify(state)).not.toContain(loginItem.password);
+    expect(await autofill.menu(7, 'https://other.test/')).toEqual({ state: 'unlocked', items: [] });
+    // https logins are never offered to an http page.
+    expect(await autofill.menu(7, 'http://www.example.com/')).toEqual({
+      state: 'unlocked',
+      items: [],
+    });
+  });
+
+  it('says locked or off instead of listing', async () => {
+    const off = await setup('https://www.example.com/', undefined, {
+      ...DEFAULT_SETTINGS,
+      inlineMenu: false,
+    });
+    expect(await off.autofill.menu(7, 'https://www.example.com/')).toEqual({ state: 'off' });
+    await expect(off.autofill.fillFromMenu(7, loginId)).rejects.toThrow(/turned off/);
+    const { autofill, service } = await setup('https://www.example.com/');
+    await service.lock();
+    expect(await autofill.menu(7, 'https://www.example.com/')).toEqual({ state: 'locked' });
+  });
+
+  it('fills from the menu with the usual checks, and marks it for the next step', async () => {
+    const { autofill, sent } = await setup('https://www.example.com/');
+    await autofill.fillFromMenu(7, loginId);
+    expect(sent.some((m) => m.type === 'content:fill')).toBe(true);
+    // The password step of a multi-step login offers the same item first, in that tab only.
+    const next = await autofill.menu(7, 'https://www.example.com/password');
+    expect(next.state === 'unlocked' && next.items[0]?.recent).toBe(true);
+    const other = await autofill.menu(8, 'https://www.example.com/password');
+    expect(other.state === 'unlocked' && other.items[0]?.recent).toBe(false);
+  });
+
+  it('never forces a menu fill onto a page the item is not saved for', async () => {
+    const { autofill, sent } = await setup('https://evil.test/');
+    await expect(autofill.fillFromMenu(7, loginId)).rejects.toMatchObject({
+      code: 'fill-mismatch',
+    });
+    expect(sent.some((m) => m.type === 'content:fill')).toBe(false);
+  });
+
+  it('forgets the multi-step item after a few minutes', async () => {
+    const clock = { time: 1_000 };
+    const { autofill } = await setup(
+      'https://www.example.com/',
+      undefined,
+      DEFAULT_SETTINGS,
+      () => clock.time,
+    );
+    await autofill.fillFromMenu(7, loginId);
+    clock.time += RECENT_FILL_MS + 1;
+    const later = await autofill.menu(7, 'https://www.example.com/');
+    expect(later.state === 'unlocked' && later.items[0]?.recent).toBe(false);
   });
 });

@@ -126,6 +126,7 @@ const route = createRouter(
     autofill,
     clipboard,
     settings: { load: settings, save: saveSettings },
+    openPopup: () => browser.action.openPopup(),
   }),
   browser.runtime.id,
   browser.runtime.getURL(''),

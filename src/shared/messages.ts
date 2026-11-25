@@ -43,6 +43,21 @@ export interface FillResult {
   copiedTotp: boolean;
 }
 
+/** One row of the inline menu. Names and usernames only, never secrets. */
+export interface InlineMenuItem {
+  id: string;
+  name: string;
+  username: string | null;
+  /** Needs the master password, so it fills from the popup instead. */
+  reprompt: boolean;
+  /** Filled in this tab a moment ago: the next step of a multi-step login. */
+  recent: boolean;
+}
+
+/** What the inline menu on a page's login fields should show. */
+export type InlineMenuState =
+  { state: 'off' } | { state: 'locked' } | { state: 'unlocked'; items: InlineMenuItem[] };
+
 /** Map of message type -> { request payload, response payload }. */
 export interface MessageMap {
   'vault:status': { request: undefined; response: VaultStatus };
@@ -66,6 +81,9 @@ export interface MessageMap {
     response: FillResult;
   };
   'autofill:page-ready': { request: { url: string; loginForms: number }; response: undefined };
+  'autofill:menu': { request: undefined; response: InlineMenuState };
+  'autofill:menu-fill': { request: { id: string }; response: FillResult };
+  'autofill:open-popup': { request: undefined; response: undefined };
   'clipboard:copied': { request: undefined; response: undefined };
   'settings:get': { request: undefined; response: Settings };
   'settings:set': { request: Partial<Settings>; response: Settings };
@@ -102,14 +120,28 @@ const MESSAGE_TYPES: readonly MessageType[] = [
   'vault:attachment',
   'autofill:fill',
   'autofill:page-ready',
+  'autofill:menu',
+  'autofill:menu-fill',
+  'autofill:open-popup',
   'clipboard:copied',
   'settings:get',
   'settings:set',
 ];
 
+/**
+ * The only messages a content script may send. The inline menu ones are answered for the
+ * sender's own tab and page only, and give names and usernames, never secrets.
+ */
+const CONTENT_SCRIPT_ALLOWED: ReadonlySet<MessageType> = new Set<MessageType>([
+  'autofill:page-ready',
+  'autofill:menu',
+  'autofill:menu-fill',
+  'autofill:open-popup',
+]);
+
 /** Messages only the popup (an extension page) may send; content scripts are refused. */
 export const EXTENSION_PAGE_ONLY: ReadonlySet<MessageType> = new Set(
-  MESSAGE_TYPES.filter((type) => type !== 'autofill:page-ready'),
+  MESSAGE_TYPES.filter((type) => !CONTENT_SCRIPT_ALLOWED.has(type)),
 );
 
 export function isMessage(value: unknown): value is Message {

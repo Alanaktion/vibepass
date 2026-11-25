@@ -1,10 +1,16 @@
 /**
- * Autofill v1, worker side. A fill only starts from a user gesture (popup Enter or the fill
- * shortcut). The worker checks which page the tab is on, that the item is saved for it, and only
+ * Autofill v1, worker side. A fill only starts from a user gesture (popup Enter, the fill
+ * shortcut, or a trusted click or Enter in the page's inline menu). The worker checks which page the tab is on, that the item is saved for it, and only
  * then sends the username and password to that tab's top frame, for that origin only.
  */
 import { CodedError } from '../shared/errors';
-import type { ContentRequest, FillResult, PageInfo } from '../shared/messages';
+import type {
+  ContentRequest,
+  FillResult,
+  InlineMenuItem,
+  InlineMenuState,
+  PageInfo,
+} from '../shared/messages';
 import type { SearchIndex } from '../search';
 import type { Settings } from '../storage/settings';
 import { isInsecureDowngrade, matchItem, MatchQuality, parseUri } from '../vault/match';
@@ -26,7 +32,14 @@ export interface AutofillDeps {
   tabs: TabsApi;
   settings(): Promise<Settings>;
   copy(text: string): Promise<void>;
+  now?: () => number;
 }
+
+/**
+ * How long a fill counts as the start of a multi-step login, so the next step (the password page
+ * after the username page) offers the same login first.
+ */
+export const RECENT_FILL_MS = 5 * 60_000;
 
 export interface FillRequest {
   tabId: number;
@@ -36,6 +49,33 @@ export interface FillRequest {
 }
 
 export function createAutofill(deps: AutofillDeps) {
+  const now = deps.now ?? (() => Date.now());
+  /** Last item filled per tab. Item ids only, never secrets. */
+  const recent = new Map<number, { id: string; at: number }>();
+
+  function recentFor(tabId: number): string | null {
+    const entry = recent.get(tabId);
+    if (!entry) return null;
+    if (now() - entry.at > RECENT_FILL_MS) {
+      recent.delete(tabId);
+      return null;
+    }
+    return entry.id;
+  }
+
+  /** Logins saved for the page, ranked, with the one just filled in this tab first. */
+  function loginsFor(tabId: number, url: string) {
+    const page = parseUri(url);
+    if (!page) return [];
+    const matches = deps.search
+      .matchesFor(url)
+      .filter((m) => m.type === CipherType.Login && !isInsecureDowngrade(m.uris, page));
+    const last = recentFor(tabId);
+    const index = matches.findIndex((m) => m.id === last);
+    if (index > 0) matches.unshift(...matches.splice(index, 1));
+    return matches.map((m) => ({ hit: m, recent: m.id === last }));
+  }
+
   async function inspect(tabId: number): Promise<PageInfo> {
     const ask = () => deps.tabs.send(tabId, { source: 'vibepass', type: 'content:inspect' });
     let info: unknown;
@@ -90,6 +130,10 @@ export function createAutofill(deps: AutofillDeps) {
       totp: totp?.code ?? null,
     })) as { filled?: unknown } | undefined;
     const filled = Array.isArray(result?.filled) ? (result.filled as string[]) : [];
+    if (filled.length > 0) {
+      for (const [tab, entry] of recent) if (now() - entry.at > RECENT_FILL_MS) recent.delete(tab);
+      recent.set(request.tabId, { id: request.id, at: now() });
+    }
 
     let copiedTotp = false;
     if (totp && !filled.includes('totp') && (await deps.settings()).autoCopyTotp) {
@@ -106,12 +150,37 @@ export function createAutofill(deps: AutofillDeps) {
   async function fillBest(tabId: number): Promise<boolean> {
     if (!deps.vault.isUnlocked) return false;
     const info = await inspect(tabId);
-    const matches = deps.search.matchesFor(info.url).filter((m) => m.type === CipherType.Login);
-    const best = matches[0];
+    const best = loginsFor(tabId, info.url)[0]?.hit;
     if (!best || best.reprompt) return false;
     await fill({ tabId, id: best.id });
     return true;
   }
 
-  return { fill, fillBest, inspect };
+  /** What the inline menu should list for a page. The caller checks the vault is current. */
+  async function menu(tabId: number, url: string): Promise<InlineMenuState> {
+    if (!(await deps.settings()).inlineMenu) return { state: 'off' };
+    if (!deps.vault.isUnlocked) return { state: 'locked' };
+    const items: InlineMenuItem[] = loginsFor(tabId, url).map(({ hit, recent: isRecent }) => ({
+      id: hit.id,
+      name: hit.name,
+      username: hit.subtitle,
+      reprompt: hit.reprompt,
+      recent: isRecent,
+    }));
+    return { state: 'unlocked', items };
+  }
+
+  /**
+   * A pick in the inline menu. Same checks as any fill (the item must be saved for the page),
+   * never forced, and never for a re-prompt item: the popup asks for the master password.
+   */
+  async function fillFromMenu(tabId: number, id: string): Promise<FillResult> {
+    if (!(await deps.settings()).inlineMenu) throw new Error('The inline menu is turned off');
+    if (deps.vault.summary(id)?.reprompt) {
+      throw new CodedError('Open Vibepass to fill this login', 'reprompt-required');
+    }
+    return fill({ tabId, id });
+  }
+
+  return { fill, fillBest, fillFromMenu, inspect, menu };
 }

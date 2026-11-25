@@ -57,6 +57,32 @@ describe('background router', () => {
     ).resolves.toEqual({ ok: true, data: undefined });
   });
 
+  it('answers the inline menu only for a tab’s top frame', async () => {
+    const { route } = setup();
+    const tab = {
+      id: 3,
+      index: 0,
+      highlighted: false,
+      active: true,
+      pinned: false,
+      incognito: false,
+    };
+    const top = { id: EXT_ID, url: 'https://example.com/', tab, frameId: 0 };
+    const frame = { ...top, frameId: 5 };
+    await expect(route(createMessage('autofill:menu', undefined), frame)).resolves.toMatchObject({
+      ok: false,
+      error: 'Untrusted sender',
+    });
+    await expect(
+      route(createMessage('autofill:menu-fill', { id: 'x' }), frame),
+    ).resolves.toMatchObject({ ok: false, error: 'Untrusted sender' });
+    // Allowed from the top frame (this test context has no autofill wired up).
+    await expect(route(createMessage('autofill:menu', undefined), top)).resolves.toMatchObject({
+      ok: false,
+      error: 'Autofill is not available',
+    });
+  });
+
   it('keeps error codes in the envelope', async () => {
     const { route } = setup();
     await expect(route(createMessage('vault:item', { id: 'x' }), sender)).resolves.toEqual({

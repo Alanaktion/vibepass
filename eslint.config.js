@@ -6,8 +6,16 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import tseslint from 'typescript-eslint';
 
 export default defineConfig(
-  // live-check.mjs drives Playwright, which isn't a project dependency.
-  { ignores: ['dist/', 'coverage/', 'node_modules/', 'scripts/dev/live-check.mjs'] },
+  // live-check.mjs and inline-menu-check.mjs drive Playwright, which isn't a project dependency.
+  {
+    ignores: [
+      'dist/',
+      'coverage/',
+      'node_modules/',
+      'scripts/dev/live-check.mjs',
+      'scripts/dev/inline-menu-check.mjs',
+    ],
+  },
   js.configs.recommended,
   tseslint.configs.strictTypeChecked,
   {

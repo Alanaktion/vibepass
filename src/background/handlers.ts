@@ -1,5 +1,6 @@
 import { log } from '../shared/log';
 import type { SearchIndex } from '../search';
+import type { Runtime } from '../shared/browser';
 import type { Settings } from '../storage/settings';
 import type { VaultState } from '../vault/state';
 import type { Handlers } from './router';
@@ -16,7 +17,18 @@ export interface BackgroundContext {
     load(): Promise<Settings>;
     save(patch: Partial<Settings>): Promise<Settings>;
   };
+  /** Open the toolbar popup, for the inline menu's "unlock" row. */
+  openPopup?: () => Promise<void>;
   now?: () => number;
+}
+
+/** The tab of a content script in a tab's top frame; the inline menu is refused anywhere else. */
+function topFrameTab(sender: Runtime.MessageSender): { tabId: number; url: string } {
+  const tabId = sender.tab?.id;
+  if (tabId === undefined || sender.frameId !== 0 || sender.url === undefined) {
+    throw new Error('Untrusted sender');
+  }
+  return { tabId, url: sender.url };
 }
 
 /** Opening the popup checks for vault changes, at most this often. */
@@ -65,6 +77,21 @@ export function createHandlers(ctx: BackgroundContext): Handlers {
     'autofill:fill': (request) => need(ctx.autofill, 'Autofill').fill(request),
     'autofill:page-ready': ({ loginForms }, sender) => {
       log.debug('page ready', { tabId: sender.tab?.id ?? -1, loginForms });
+      return undefined;
+    },
+    'autofill:menu': async (_request, sender) => {
+      const { tabId, url } = topFrameTab(sender);
+      // Restores an unlocked vault after the worker restarted, like the popup does.
+      await service.status();
+      return need(ctx.autofill, 'Autofill').menu(tabId, url);
+    },
+    'autofill:menu-fill': ({ id }, sender) => {
+      const { tabId } = topFrameTab(sender);
+      return need(ctx.autofill, 'Autofill').fillFromMenu(tabId, id);
+    },
+    'autofill:open-popup': async (_request, sender) => {
+      topFrameTab(sender);
+      await need(ctx.openPopup, 'Popup')();
       return undefined;
     },
 

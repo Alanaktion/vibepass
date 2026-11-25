@@ -110,6 +110,16 @@ export function SettingsView({ onBack, onSettings }: Props) {
           <label class="check">
             <input
               type="checkbox"
+              checked={settings.inlineMenu}
+              onChange={(e) => {
+                save({ inlineMenu: e.currentTarget.checked });
+              }}
+            />
+            Show matching logins under login fields on web pages
+          </label>
+          <label class="check">
+            <input
+              type="checkbox"
               checked={builtIn === 'off-by-us' || builtIn === 'off'}
               disabled={builtIn === 'locked' || builtIn === 'other-extension' || builtIn === 'off'}
               onChange={(e) => {

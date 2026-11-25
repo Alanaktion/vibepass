@@ -12,6 +12,8 @@ export interface Settings {
   showIcons: boolean;
   /** After filling a login that has a one-time password, copy the code. */
   autoCopyTotp: boolean;
+  /** Show a menu of matching logins under login fields on web pages. */
+  inlineMenu: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -20,6 +22,7 @@ export const DEFAULT_SETTINGS: Settings = {
   clipboardClearSeconds: 30,
   showIcons: true,
   autoCopyTotp: true,
+  inlineMenu: true,
 };
 
 export const LOCK_AFTER_CHOICES = [1, 5, 15, 30, 60, 240, 0] as const;

@@ -4,7 +4,7 @@ How we get from the current scaffold to a public v1, phase by phase. This follow
 the project spec (Spike, MVP, Write support, Beta, v1, Later) and adds the concrete milestones and
 exit criteria for each phase, based on what is already in the repo.
 
-Last updated: 2026-11-25 (Phase 1 built).
+Last updated: 2026-11-25 (Phase 1 built; basic inline menu and multi-step logins pulled forward).
 
 ## Where we are
 
@@ -208,6 +208,24 @@ until this gate is green in CI.
 ## Phase 3: Beta
 
 **Goal:** make it good and safe enough for other people.
+
+> **Pulled forward (2026-11-25): basic versions of milestones 1 and 2**, ahead of Phase 2, so the
+> Phase 1 daily-use trial has an inline menu. Deliberately minimal; read-only like the rest.
+>
+> - **Inline menu (basic):** matching logins under the focused username, password, or one-time
+>   code field, in a closed shadow root in the top layer (`src/content/menu.ts`). Arrow keys,
+>   Enter, Escape, click; only trusted input picks. It follows scrolled and transformed fields,
+>   turns off the browser's form-history dropdown on that field while open (restored on blur),
+>   shows one "Unlock Vibepass" row when locked, and has an on/off setting. Picks go through the
+>   same match and https checks as any fill; re-prompt items open the popup.
+>   Checked by `scripts/dev/inline-menu-check.mjs` (15 of 15 in Chromium against Vaultwarden).
+> - **Multi-step and split logins (basic):** a username-only step fills when the field clearly
+>   asks for a username; the password step offers the login just filled in that tab first (for
+>   5 minutes), and the fill shortcut prefers it too. Split logins take a clearly labelled
+>   username from another form.
+> - **Not yet:** signup forms with the generator and password-change forms with the update
+>   banner (both need Phase 2 writes), screen reader announcements for the menu, search inside
+>   the menu, cross-origin iframes, and Firefox testing of the menu.
 
 ### Milestones
 

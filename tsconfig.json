@@ -22,5 +22,5 @@
     "types": ["node", "vitest/globals"]
   },
   "include": ["src", "tests", "scripts", "vite.config.ts", "eslint.config.js"],
-  "exclude": ["scripts/dev/live-check.mjs"]
+  "exclude": ["scripts/dev/live-check.mjs", "scripts/dev/inline-menu-check.mjs"]
 }
