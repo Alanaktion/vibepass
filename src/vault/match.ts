@@ -127,3 +127,32 @@ export function isInsecureDowngrade(uris: readonly LoginUri[], page: ParsedPage)
   const matching = uris.filter((uri) => matchUri(uri, page) !== MatchQuality.None);
   return matching.length > 0 && matching.every((uri) => /^https:\/\//i.test(uri.uri.trim()));
 }
+
+/**
+ * Finer ranking for "current site first": match quality, then a parent domain (example.com)
+ * over a sibling or deeper subdomain, then how much of the page's hostname the saved URI shares
+ * (asdf.example.com beats example.com on asdf.example.com). 0 means no match.
+ */
+export function matchScore(uris: readonly LoginUri[], page: ParsedPage | null): number {
+  if (!page) return 0;
+  const pageLabels = page.url.hostname.split('.').reverse();
+  let best = 0;
+  for (const uri of uris) {
+    const quality = matchUri(uri, page);
+    if (quality === MatchQuality.None) continue;
+    let score = quality * 1000;
+    const saved = parseSaved(uri.uri);
+    if (saved) {
+      const savedLabels = saved.url.hostname.split('.').reverse();
+      let shared = 0;
+      while (shared < savedLabels.length && savedLabels[shared] === pageLabels[shared]) shared++;
+      score += shared * 10;
+      // Every label of the saved host matches: it's the page's host or a parent of it, which
+      // applies to the page more surely than a sibling or a deeper subdomain does.
+      if (shared === savedLabels.length) score += 500;
+      if (saved.port === page.port) score += 1;
+    }
+    if (score > best) best = score;
+  }
+  return best;
+}

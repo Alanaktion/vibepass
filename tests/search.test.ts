@@ -64,6 +64,26 @@ describe('quick find', () => {
     expect(typed[0]!.id).toBe('2');
   });
 
+  it('ranks the most specific domain match first', () => {
+    const index = createSearchIndex();
+    index.replaceAll([
+      item('jkl', 'Jkl', 'https://jkl.example.com'),
+      item('root', 'Root', 'https://example.com'),
+      item('asdf', 'Asdf', 'https://asdf.example.com'),
+      item('deep', 'Deep', 'https://x.asdf.example.com'),
+      item('other', 'Other', 'https://other.test'),
+    ]);
+    const url = 'https://asdf.example.com/login';
+    expect(index.search('', { url }).map((i) => i.id)).toEqual([
+      'asdf',
+      'root',
+      'deep',
+      'jkl',
+      'other',
+    ]);
+    expect(index.matchesFor(url).map((i) => i.id)).toEqual(['asdf', 'root', 'deep', 'jkl']);
+  });
+
   it('finds autofill matches for a page, best first', () => {
     const index = createSearchIndex();
     index.replaceAll(items);

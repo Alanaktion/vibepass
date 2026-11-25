@@ -6,7 +6,7 @@
  * The index lives only in the background worker and is cleared on lock.
  */
 import MiniSearch from 'minisearch';
-import { clearMatchCache, matchItem, MatchQuality, parseUri } from '../vault/match';
+import { clearMatchCache, matchScore, parseUri } from '../vault/match';
 import type { CipherSummary, SearchHit } from '../vault/types';
 
 export interface SearchOptions {
@@ -67,7 +67,7 @@ export function createSearchIndex(): SearchIndex {
   let ordered: CipherSummary[] = [];
 
   const rank = (item: CipherSummary, page: ReturnType<typeof parseUri>) =>
-    matchItem(item.uris, page);
+    matchScore(item.uris, page);
 
   return {
     replaceAll(items, notes) {
@@ -105,9 +105,7 @@ export function createSearchIndex(): SearchIndex {
       const ranked = scored.map(({ item, score }) => ({ item, score, site: rank(item, page) }));
       // Stable sort: site match quality first, then relevance (or favorites, with no query).
       ranked.sort((a, b) => b.site - a.site || b.score - a.score);
-      return ranked
-        .slice(0, limit)
-        .map(({ item, site }) => ({ ...item, siteMatch: site !== MatchQuality.None }));
+      return ranked.slice(0, limit).map(({ item, site }) => ({ ...item, siteMatch: site > 0 }));
     },
 
     matchesFor(url) {
@@ -115,7 +113,7 @@ export function createSearchIndex(): SearchIndex {
       if (!page) return [];
       return ordered
         .map((item) => ({ item, site: rank(item, page) }))
-        .filter(({ site }) => site !== MatchQuality.None)
+        .filter(({ site }) => site > 0)
         .sort((a, b) => b.site - a.site)
         .map(({ item }) => ({ ...item, siteMatch: true }));
     },
