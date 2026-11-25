@@ -161,8 +161,10 @@ The web vault needs HTTPS, so create a self-signed `ssl/cert.pem` and `ssl/key.p
 
 ## Roadmap
 
-See [docs/PLAN.md](docs/PLAN.md) for the phased build plan. Phase 0 is done; next is
-**Phase 1 (MVP)**: quick find, item view, TOTP, autofill, auto-lock, and two-step login.
+See [docs/PLAN.md](docs/PLAN.md) for the phased build plan. Phases 0 and 1 are done, with a
+basic inline menu and multi-step logins pulled forward from Phase 3; next is **Phase 2 (write
+support)**: save, update, edit, generate, and organize. Contributors and coding agents: start
+with [AGENTS.md](AGENTS.md).
 
 ## License
 
