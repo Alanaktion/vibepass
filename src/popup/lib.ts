@@ -5,7 +5,9 @@ import { sendMessage } from '../shared/messaging';
 /** Copy from the popup (it has the user gesture), then let the worker schedule the clear. */
 export async function copyText(text: string): Promise<void> {
   await navigator.clipboard.writeText(text);
-  await sendMessage('clipboard:copied').catch(() => undefined);
+  await sendMessage('clipboard:copied').catch(() => {
+    throw new Error('Copied, but automatic clipboard clearing could not be scheduled');
+  });
 }
 
 export function errorMessage(error: unknown, fallback = 'Something went wrong'): string {

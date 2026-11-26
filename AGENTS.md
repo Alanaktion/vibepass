@@ -197,14 +197,18 @@ Live checks against a real server (need Docker and Playwright, which is not a pr
 dependency; Playwright is preinstalled in Claude cloud sessions). Start a local Vaultwarden, then:
 
 ```sh
-node scripts/dev/register-account.mjs http://127.0.0.1:8000 live@example.test 'live test password'
-node scripts/dev/seed-vault.mjs http://127.0.0.1:8000 live@example.test 'live test password' \
+# Bash: enter the disposable account password without echo or command history.
+read -rs -p 'Test account password: ' VIBEPASS_TEST_PASSWORD
+export VIBEPASS_TEST_PASSWORD
+# For --two-factor, set VIBEPASS_TEST_TOTP_FILE to a new file in a private directory.
+node scripts/dev/register-account.mjs http://127.0.0.1:8000 live@example.test
+node scripts/dev/seed-vault.mjs http://127.0.0.1:8000 live@example.test \
   http://127.0.0.1:8090/login            # --two-factor on a second account tests 2FA
 npm run build:chrome
-node scripts/dev/live-check.mjs http://127.0.0.1:8000 live@example.test 'live test password'
-node scripts/dev/inline-menu-check.mjs http://127.0.0.1:8000 live@example.test 'live test password'
-node scripts/dev/write-check.mjs http://127.0.0.1:8000 live@example.test 'live test password'
-node scripts/dev/passkey-check.mjs http://127.0.0.1:8000 live@example.test 'live test password'
+node scripts/dev/live-check.mjs http://127.0.0.1:8000 live@example.test
+node scripts/dev/inline-menu-check.mjs http://127.0.0.1:8000 live@example.test
+node scripts/dev/write-check.mjs http://127.0.0.1:8000 live@example.test
+node scripts/dev/passkey-check.mjs http://127.0.0.1:8000 live@example.test
 ```
 
 See the README for the full Docker command. Vaultwarden rate-limits logins (about 10 a minute),

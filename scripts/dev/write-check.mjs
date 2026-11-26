@@ -6,7 +6,7 @@
  * clients use) from a separate login, so "the official clients see the same thing" is checked
  * against a real server, not just in unit tests. Dev and test use only; it writes to the vault.
  *
- *   node scripts/dev/write-check.mjs <serverUrl> <email> <password> [screenshotDir]
+ *   node scripts/dev/write-check.mjs <serverUrl> <email>
  *
  * The page server listens on 127.0.0.1:8090, which is what seed-vault.mjs saved the logins for.
  */
@@ -23,9 +23,10 @@ const require = createRequire(import.meta.url);
 /** @type {typeof import('playwright')} */
 const { chromium } = require('playwright');
 
-const [serverUrl, email, password, shots] = process.argv.slice(2);
+const password = process.env.VIBEPASS_TEST_PASSWORD;
+const [serverUrl, email] = process.argv.slice(2);
 if (!serverUrl || !email || !password) {
-  console.error('usage: write-check.mjs <serverUrl> <email> <password> [screenshotDir]');
+  console.error('Set VIBEPASS_TEST_PASSWORD and run: write-check.mjs <serverUrl> <email>');
   process.exit(2);
 }
 const base = serverUrl.replace(/\/+$/, '');
@@ -33,10 +34,10 @@ const root = fileURLToPath(new URL('../..', import.meta.url));
 /** Unique per run, so the check can run again on the same vault. */
 const stamp = String(Date.now());
 const changed = `changed-on-the-site-${stamp}`;
-const results = /** @type {[string, boolean, string][]} */ ([]);
-const check = (/** @type {string} */ name, /** @type {boolean} */ ok, detail = '') => {
-  results.push([name, ok, detail]);
-  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `  (${detail})` : ''}`);
+const results = /** @type {[string, boolean][]} */ ([]);
+const check = (/** @type {string} */ name, /** @type {boolean} */ ok) => {
+  results.push([name, ok]);
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`);
 };
 
 // ---- Bitwarden's own client code, logged in separately, to read back what Vibepass wrote ----
@@ -53,7 +54,7 @@ const enc = new TextEncoder();
 async function call(path, init = {}) {
   const res = await fetch(`${base}${path}`, init);
   const text = await res.text();
-  if (!res.ok) throw new Error(`${path}: ${String(res.status)} ${text}`);
+  if (!res.ok) throw new Error(`${path}: ${String(res.status)}`);
   return text ? JSON.parse(text) : null;
 }
 
@@ -197,9 +198,6 @@ const send = (/** @type {string} */ type, /** @type {unknown} */ payload) =>
     ([t, p]) => chrome.runtime.sendMessage({ source: 'vibepass', type: t, payload: p }),
     /** @type {const} */ ([type, payload]),
   );
-const shot = async (/** @type {import('playwright').Page} */ page, /** @type {string} */ name) => {
-  if (shots) await page.screenshot({ path: join(shots, name) });
-};
 
 try {
   await popup.getByLabel('Server URL', { exact: true }).fill(serverUrl);
@@ -232,7 +230,6 @@ try {
   await popup.getByLabel('Field 1 name', { exact: true }).fill('PIN');
   await popup.getByLabel('Field 1 type', { exact: true }).selectOption({ label: 'Hidden' });
   await popup.getByLabel('Field 1 value', { exact: true }).fill('4321');
-  await shot(popup, 'edit.png');
   await popup.keyboard.press('Control+s');
   await popup.getByRole('button', { name: 'Edit' }).waitFor();
   const created = (await send('vault:search', { query: 'Created by Vibepass' })).data[0];
@@ -253,9 +250,7 @@ try {
       view.fields?.[0]?.value === '4321' &&
       view.fields?.[0]?.type === 1 &&
       Boolean(server.sync.ciphers.find((/** @type {any} */ c) => c.id === created.id)?.key),
-    `password ${String(generated.length)} chars, per-item key`,
   );
-  await shot(popup, 'item-editable.png');
 
   // Edit the password in the popup: the old one goes to the password history.
   await popup.getByRole('button', { name: 'Edit' }).click();
@@ -291,7 +286,6 @@ try {
       JSON.stringify(after.fields) === JSON.stringify(before.fields) &&
       after.login?.totp === before.login?.totp &&
       after.login?.password === before.login?.password,
-    saved.error ?? '',
   );
   const detail = (await send('vault:item', { id: local.id })).data;
   const file = (
@@ -317,7 +311,6 @@ try {
     wikiSaved.ok &&
       server.views.get(wiki.id)?.name === 'Team Wiki (edited)' &&
       server.views.get(wiki.id)?.login?.password === 'team-secret-1',
-    wikiSaved.error ?? '',
   );
 
   // Another client changes the item; saving the stale copy is a conflict, then overwrite works.
@@ -351,7 +344,6 @@ try {
     conflict.code === 'conflict' &&
       overwrite.ok &&
       server.views.get(created.id)?.name === 'Mine wins',
-    JSON.stringify({ conflict, overwrite: overwrite.ok ? 'ok' : overwrite }),
   );
 
   // Folders and moving items.
@@ -402,7 +394,6 @@ try {
   // The username field shows saved logins for the site; Tab moves on, as a user would.
   await site.keyboard.press('Tab');
   await site.waitForTimeout(400);
-  await shot(site, 'signup-menu.png');
   await site.keyboard.press('ArrowDown');
   await site.keyboard.press('Enter');
   await site.waitForTimeout(400);
@@ -417,7 +408,6 @@ try {
   await site.waitForURL('**/welcome');
   await site.locator('vibepass-banner').waitFor({ timeout: 5000 });
   await site.waitForTimeout(300);
-  await shot(site, 'save-banner.png');
   // The banner is in a closed shadow root: reach it with the keyboard, as a user could.
   await site.keyboard.press('Tab');
   await site.keyboard.press('Control+a');
@@ -433,7 +423,6 @@ try {
   check(
     'save banner saves the new login',
     signup?.subtitle === `signup-${stamp}` && signupPw === a,
-    signup ? signup.name : 'not found',
   );
 
   // Sign in with a changed password: the banner offers to update the saved login.
@@ -448,7 +437,6 @@ try {
   await site.waitForURL('**/welcome');
   await site.locator('vibepass-banner').waitFor({ timeout: 5000 });
   await site.waitForTimeout(300);
-  await shot(site, 'update-banner.png');
   await site.keyboard.press('Tab');
   await site.keyboard.press('Enter');
   await site.waitForTimeout(800);
@@ -475,20 +463,8 @@ try {
     'no banner for a login that is already saved',
     (await site.locator('vibepass-banner').count()) === 0,
   );
-
-  if (shots) {
-    await popup.bringToFront();
-    await popup.goto(popupUrl);
-    await popup.getByRole('button', { name: 'Password generator' }).click();
-    await popup.waitForTimeout(400);
-    await shot(popup, 'generator.png');
-  }
-} catch (error) {
-  check(
-    'unexpected error',
-    false,
-    `${String(error)}\n${await popup.innerText('body').catch(() => '')}`,
-  );
+} catch {
+  check('unexpected error', false);
 } finally {
   await context.close();
   pages.close();

@@ -300,6 +300,7 @@ export class ApiClient {
         ...init,
         credentials: 'omit',
         cache: 'no-store',
+        redirect: 'error',
       });
     } catch {
       throw new ApiError(`Could not reach ${this.baseUrl}`, 0);
@@ -325,6 +326,7 @@ export class ApiClient {
         headers: { Accept: 'application/json', ...(init.headers as Record<string, string>) },
         credentials: 'omit',
         cache: 'no-store',
+        redirect: 'error',
       });
     } catch {
       throw new ApiError(`Could not reach ${this.baseUrl}`, 0);
@@ -413,5 +415,8 @@ export function normalizeBaseUrl(input: string): string {
   if (url.protocol !== 'https:' && url.protocol !== 'http:') {
     throw new Error('Server URL must use http or https');
   }
+  const loopback =
+    ['localhost', '[::1]'].includes(url.hostname) || /^127(?:\.\d+){3}$/.test(url.hostname);
+  if (url.protocol === 'http:' && !loopback) throw new Error('Use HTTPS for a remote vault server');
   return `${url.origin}${url.pathname}`.replace(/\/+$/, '');
 }

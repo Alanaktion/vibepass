@@ -165,7 +165,7 @@ export interface MessageMap {
   'vault:lock': { request: undefined; response: VaultStatus };
   'vault:sync': { request: undefined; response: VaultStatus };
   'vault:search': { request: { query: string; url?: string }; response: SearchHit[] };
-  'vault:item': { request: { id: string }; response: CipherDetail };
+  'vault:item': { request: { id: string } & RepromptFields; response: CipherDetail };
   'vault:reveal': { request: { id: string; fieldId: string } & RepromptFields; response: string };
   'vault:totp': { request: { id: string } & RepromptFields; response: TotpCode };
   'vault:attachment': {
@@ -194,7 +194,7 @@ export interface MessageMap {
   'generator:history': { request: undefined; response: PasswordHistoryEntry[] };
   'generator:clear-history': { request: undefined; response: undefined };
   'autofill:fill': {
-    request: { tabId: number; id: string; force?: boolean } & RepromptFields;
+    request: { tabId: number; id: string; confirmedOrigin?: string } & RepromptFields;
     response: FillResult;
   };
   'autofill:page-ready': { request: { url: string; loginForms: number }; response: undefined };

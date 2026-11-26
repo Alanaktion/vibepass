@@ -22,6 +22,8 @@ const ACCOUNT_KEY = 'account';
 const DEVICE_KEY = 'deviceId';
 
 export async function loadAccount(): Promise<Account | null> {
+  // Discard tokens written in plaintext by older releases, including signed-out accounts.
+  await browser.storage.local.remove('twoFactorRemember');
   const stored = (await browser.storage.local.get(ACCOUNT_KEY))[ACCOUNT_KEY] as Account | undefined;
   return stored ?? null;
 }
@@ -43,7 +45,7 @@ export async function deviceId(): Promise<string> {
   return id;
 }
 
-const REMEMBER_KEY = 'twoFactorRemember';
+const REMEMBER_KEY = 'encryptedTwoFactorRemember';
 
 /**
  * "Remember me" tokens for two-step login, by server and email, as the official clients keep

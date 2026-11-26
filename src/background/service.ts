@@ -117,8 +117,8 @@ export class VaultService {
     private readonly search: SearchIndex,
     private readonly deps: ServiceDeps,
   ) {
-    this.ready = this.restore().catch((error: unknown) => {
-      log.error('restore failed', error);
+    this.ready = this.restore().catch(() => {
+      log.error('restore failed');
     });
   }
 
@@ -152,7 +152,11 @@ export class VaultService {
       const userKey = await unwrapUserKey(protectedUserKey, keys.stretchedMasterKey);
 
       if (req.challenge?.twoFactor?.remember && token.TwoFactorToken) {
-        await this.deps.remembered.set(api.baseUrl, email, token.TwoFactorToken);
+        await this.deps.remembered.set(
+          api.baseUrl,
+          email,
+          await encryptString(token.TwoFactorToken, keys.stretchedMasterKey),
+        );
       }
 
       const sync = await api.sync();
@@ -198,7 +202,10 @@ export class VaultService {
     const device = { ...this.deps.device, identifier: await this.deps.account.deviceId() };
     const base = { email, masterPasswordHash: keys.masterPasswordHash, device };
     if (!challenge?.twoFactor) {
-      const remembered = await this.deps.remembered.get(api.baseUrl, email);
+      const wrapped = await this.deps.remembered.get(api.baseUrl, email);
+      const remembered = wrapped
+        ? await decryptString(wrapped, keys.stretchedMasterKey).catch(() => null)
+        : null;
       if (remembered) {
         try {
           return await api.login({
@@ -214,9 +221,9 @@ export class VaultService {
           });
         } catch (error) {
           if (!(error instanceof TwoFactorRequiredError)) throw error;
-          await this.deps.remembered.set(api.baseUrl, email, null);
         }
       }
+      if (wrapped) await this.deps.remembered.set(api.baseUrl, email, null);
     }
     return api.login(challenge ? { ...base, challenge } : base);
   }
@@ -277,7 +284,10 @@ export class VaultService {
     await this.ready;
     const account = this.vault.currentAccount;
     await this.lock();
-    if (account) await this.deps.cache.clear(account.userId);
+    if (account) {
+      await this.deps.remembered.set(account.serverUrl, account.email, null);
+      await this.deps.cache.clear(account.userId);
+    }
     await this.deps.generator.clearHistory();
     await this.deps.account.clear();
     this.vault.setAccount(null);
@@ -303,7 +313,9 @@ export class VaultService {
       await this.runSync(force);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Sync failed';
-      log.warn('background sync failed', { reason: message });
+      log.warn('background sync failed', {
+        category: error instanceof ApiError ? 'server' : 'sync',
+      });
       // The vault may have locked while the sync was running.
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
       if (this.vault.isUnlocked) {
@@ -473,8 +485,8 @@ export class VaultService {
     key.fill(0);
   }
 
-  async item(id: string): Promise<CipherDetail> {
-    const item = await this.decryptItem(id, null);
+  async item(id: string, masterPassword?: string): Promise<CipherDetail> {
+    const item = await this.decryptItem(id, { masterPassword });
     return toDetail(item, this.vault);
   }
 

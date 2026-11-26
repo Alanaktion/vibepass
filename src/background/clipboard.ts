@@ -14,7 +14,10 @@ export interface ClipboardDeps {
   write: (text: string) => Promise<void>;
   clearAfterSeconds: () => Promise<number>;
   now: () => number;
-  alarms: { create(name: string, info: { when: number }): void; clear(name: string): unknown };
+  alarms: {
+    create(name: string, info: { when: number }): void | Promise<void>;
+    clear(name: string): unknown;
+  };
   store: {
     get: (key: string) => Promise<Record<string, unknown>>;
     set: (items: Record<string, unknown>) => Promise<void>;
@@ -26,6 +29,14 @@ export interface ClipboardDeps {
 export function createClipboard(deps: ClipboardDeps) {
   const setTimer = deps.setTimer ?? ((fn: () => void, ms: number) => setTimeout(fn, ms));
 
+  // Timer, alarm and copy events may overlap. Finish each deadline update before the next.
+  let pending: Promise<unknown> = Promise.resolve();
+  function inOrder<T>(operation: () => Promise<T>): Promise<T> {
+    const result = pending.then(operation);
+    pending = result.catch(() => undefined);
+    return result;
+  }
+
   async function pendingAt(): Promise<number | null> {
     const value = (await deps.store.get(PENDING_KEY))[PENDING_KEY];
     return typeof value === 'number' ? value : null;
@@ -35,9 +46,14 @@ export function createClipboard(deps: ClipboardDeps) {
   async function clearIfDue(): Promise<boolean> {
     const at = await pendingAt();
     if (at === null || deps.now() < at - 500) return false;
+    try {
+      await deps.write('');
+    } catch {
+      await deps.alarms.create(CLIPBOARD_ALARM, { when: deps.now() + 30_000 });
+      return false;
+    }
     await deps.store.remove(PENDING_KEY);
     await deps.alarms.clear(CLIPBOARD_ALARM);
-    await deps.write('');
     return true;
   }
 
@@ -48,8 +64,8 @@ export function createClipboard(deps: ClipboardDeps) {
     const at = deps.now() + seconds * 1000;
     await deps.store.set({ [PENDING_KEY]: at });
     // Chrome alarms fire no sooner than 30 s; the timer covers shorter delays while we're awake.
-    deps.alarms.create(CLIPBOARD_ALARM, { when: Math.max(at, deps.now() + 30_000) });
-    setTimer(() => void clearIfDue(), seconds * 1000);
+    await deps.alarms.create(CLIPBOARD_ALARM, { when: Math.max(at, deps.now() + 30_000) });
+    setTimer(() => void inOrder(clearIfDue), seconds * 1000);
   }
 
   /** Copy from the worker (the TOTP after a fill), then schedule the clear. */
@@ -58,5 +74,9 @@ export function createClipboard(deps: ClipboardDeps) {
     await scheduleClear();
   }
 
-  return { copy, scheduleClear, clearIfDue };
+  return {
+    copy: (text: string) => inOrder(() => copy(text)),
+    scheduleClear: () => inOrder(scheduleClear),
+    clearIfDue: () => inOrder(clearIfDue),
+  };
 }

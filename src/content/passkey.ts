@@ -233,11 +233,9 @@ function onRequest(data: PageRequestMessage): void {
     data.kind === 'get'
       ? handleGet(data.request, end, isCurrent)
       : handleCreate(data.request, end, isCurrent);
-  run.catch((error: unknown) => {
+  run.catch(() => {
     // The worker couldn't be reached or refused: let the browser handle it.
-    log.debug('passkey request handed to the browser', {
-      reason: error instanceof Error ? error.message : '',
-    });
+    log.debug('passkey request handed to the browser');
     end({ kind: 'fallback' });
   });
 }

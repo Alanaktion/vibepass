@@ -5,20 +5,23 @@
  * card, and an organization with a collection and a shared login. Optionally turns on
  * authenticator two-step login. Dev and test use only; never point it at a real account.
  *
- *   node scripts/dev/seed-vault.mjs <serverUrl> <email> <password> <siteUrl> [--two-factor]
+ *   node scripts/dev/seed-vault.mjs <serverUrl> <email> <siteUrl> [--two-factor]
  *
- * Prints a JSON summary (item ids, and the 2FA secret when enabled).
+ * Prints a JSON summary (item ids).
  */
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { webcrypto } from 'node:crypto';
 import * as glue from '@bitwarden/sdk-internal/bitwarden_wasm_internal_bg.js';
 
+const password = process.env.VIBEPASS_TEST_PASSWORD;
 const args = process.argv.slice(2);
 const twoFactor = args.includes('--two-factor');
-const [serverUrl, email, password, siteUrl] = args.filter((a) => !a.startsWith('--'));
+const [serverUrl, email, siteUrl] = args.filter((a) => !a.startsWith('--'));
 if (!serverUrl || !email || !password || !siteUrl) {
-  console.error('usage: seed-vault.mjs <serverUrl> <email> <password> <siteUrl> [--two-factor]');
+  console.error(
+    'Set VIBEPASS_TEST_PASSWORD and run: seed-vault.mjs <serverUrl> <email> <siteUrl> [--two-factor]',
+  );
   process.exit(2);
 }
 const base = serverUrl.replace(/\/+$/, '');
@@ -41,7 +44,7 @@ const b64 = (/** @type {Uint8Array} */ bytes) => Buffer.from(bytes).toString('ba
 async function call(path, init = {}) {
   const res = await fetch(`${base}${path}`, init);
   const text = await res.text();
-  if (!res.ok) throw new Error(`${path}: ${String(res.status)} ${text}`);
+  if (!res.ok) throw new Error(`${path}: ${String(res.status)}`);
   return text ? JSON.parse(text) : null;
 }
 
@@ -255,6 +258,8 @@ const shared = await call('/api/ciphers/create', {
 Object.assign(created, { organization: org.id, shared: shared.id });
 
 if (twoFactor) {
+  const seedFile = process.env.VIBEPASS_TEST_TOTP_FILE;
+  if (!seedFile) throw new Error('Set VIBEPASS_TEST_TOTP_FILE to a new private file');
   // Vaultwarden hands out the secret and a verification token first, then enables it.
   const setup = await call('/api/two-factor/get-authenticator', {
     method: 'POST',
@@ -263,6 +268,7 @@ if (twoFactor) {
   });
   const secret = setup.authenticator?.key ?? setup.key;
   const { generateTotp } = await import('../../src/vault/totp.ts');
+  await writeFile(seedFile, secret, { mode: 0o600, flag: 'wx' });
   const code = (await generateTotp(secret, Date.now())).code;
   await call('/api/two-factor/authenticator', {
     method: 'POST',
@@ -274,7 +280,6 @@ if (twoFactor) {
       userVerificationToken: setup.userVerificationToken,
     }),
   });
-  Object.assign(created, { twoFactorSecret: secret });
 }
 
 console.log(JSON.stringify(created, null, 2));

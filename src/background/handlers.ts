@@ -69,7 +69,7 @@ export function createHandlers(ctx: BackgroundContext): Handlers {
       if (!vault.isUnlocked) return [];
       return search.search(query, url === undefined ? {} : { url });
     },
-    'vault:item': ({ id }) => service.item(id),
+    'vault:item': ({ id, masterPassword }) => service.item(id, masterPassword),
     'vault:reveal': ({ id, fieldId, masterPassword }) =>
       service.reveal(id, fieldId, masterPassword),
     'vault:totp': ({ id, masterPassword }) => service.totp(id, masterPassword),

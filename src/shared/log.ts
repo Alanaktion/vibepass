@@ -12,9 +12,7 @@ export const log = {
   warn(message: string, context?: Record<string, string | number | boolean>): void {
     console.warn(PREFIX, message, context ?? '');
   },
-  error(message: string, error?: unknown): void {
-    // Only the error name/message is logged, never arbitrary objects that might hold secrets.
-    const detail = error instanceof Error ? `${error.name}: ${error.message}` : '';
-    console.error(PREFIX, message, detail);
+  error(message: string): void {
+    console.error(PREFIX, message);
   },
 };

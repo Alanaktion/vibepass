@@ -42,9 +42,13 @@ export function ItemView({ id, onBack, onEdit }: Props) {
   useEffect(() => {
     let cancelled = false;
     setItem(null);
-    sendMessage('vault:item', { id }).then(
+    setError(null);
+    withReprompt(ctx.askPassword, (password) =>
+      sendMessage('vault:item', { id, ...pw(password) }),
+    ).then(
       (detail) => {
-        if (!cancelled) setItem(detail);
+        if (!cancelled && detail) setItem(detail);
+        if (!cancelled && !detail) setError('Master password required to view this item');
       },
       (e: unknown) => {
         if (!cancelled) setError(errorMessage(e, 'Could not open this item'));
@@ -53,7 +57,7 @@ export function ItemView({ id, onBack, onEdit }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [id, ctx.status.version]);
+  }, [id, ctx.status.version, ctx.askPassword]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -84,7 +88,7 @@ export function ItemView({ id, onBack, onEdit }: Props) {
         {item && (
           <ItemIcon
             name={item.name}
-            src={ctx.settings?.showIcons ? iconUrl(ctx.status.serverUrl, host) : null}
+            src={ctx.settings?.useServerIcons ? iconUrl(ctx.status.serverUrl, host) : null}
           />
         )}
         <h1 class="grow title">{item?.name ?? ''}</h1>

@@ -70,18 +70,25 @@ export async function fillItem(ctx: PopupContext, id: string): Promise<boolean> 
     ctx.toast('Open a web page to fill');
     return false;
   }
-  const run = (force: boolean) =>
+  const run = (confirmedOrigin?: string) =>
     withReprompt(ctx.askPassword, (masterPassword) =>
-      sendMessage('autofill:fill', { tabId: tab.id, id, force, ...pw(masterPassword) }),
+      sendMessage('autofill:fill', {
+        tabId: tab.id,
+        id,
+        ...(confirmedOrigin === undefined ? {} : { confirmedOrigin }),
+        ...pw(masterPassword),
+      }),
     );
   try {
     let result;
     try {
-      result = await run(false);
+      result = await run();
     } catch (error) {
       if (!isCodedError(error, 'fill-mismatch')) throw error;
+      const details = error.details as { origin?: unknown } | undefined;
+      if (typeof details?.origin !== 'string') throw error;
       if (!(await ctx.confirm(`${error.message}. Fill anyway?`, 'Fill anyway'))) return false;
-      result = await run(true);
+      result = await run(details.origin);
     }
     if (!result) return false;
     if (result.copiedTotp) {

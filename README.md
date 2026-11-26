@@ -144,6 +144,11 @@ browser only where it must: Chrome uses `background.service_worker`, Firefox use
   `storage.session`. Never in `storage.local` or IndexedDB in plaintext.
 - `no-console` is an error in `src/`; use `src/shared/log.ts`, and never log vault data.
 - The background router rejects messages from other extensions.
+- Remote servers require HTTPS. Local development can use HTTP on loopback. API requests reject redirects.
+- Autofill confirmation applies to the displayed origin. An address saved without a scheme defaults to HTTPS.
+- Opening a re-prompted item requires the master password. Its notes are excluded from search.
+- Remembered two-step tokens are encrypted. Logging out forgets the current account's token.
+- Website icons are opt-in. Enabling them sends the hostname of each displayed site to your vault server.
 - Host access to the server is requested at runtime via `optional_host_permissions`.
 - The extension CSP allows `'wasm-unsafe-eval'` for Bitwarden's SDK (WASM), and nothing else
   beyond `'self'`.
@@ -171,21 +176,27 @@ reads items that code encrypted, for every field type.
 docker run -d --name vw -e SIGNUPS_ALLOWED=true -e I_REALLY_WANT_VOLATILE_STORAGE=true \
   -e DOMAIN=https://localhost:8222 -v "$PWD/ssl:/ssl" \
   -e ROCKET_TLS='{certs="/ssl/cert.pem",key="/ssl/key.pem"}' -p 8222:80 vaultwarden/server
-node scripts/dev/register-account.mjs https://localhost:8222 me@example.test 'a long test password' argon2id
+read -rs -p 'Test account password: ' VIBEPASS_TEST_PASSWORD
+export VIBEPASS_TEST_PASSWORD
+node scripts/dev/register-account.mjs https://localhost:8222 me@example.test argon2id
 ```
 
 For a full live check of the built extension (needs Playwright, which isn't a project
 dependency), seed a known vault and run the checks. Plain http on 127.0.0.1 is fine for this:
 
 ```sh
-node scripts/dev/register-account.mjs http://127.0.0.1:8000 live@example.test 'live test password'
-node scripts/dev/seed-vault.mjs http://127.0.0.1:8000 live@example.test 'live test password' \
+# Bash: enter the disposable account password without echo or command history.
+read -rs -p 'Test account password: ' VIBEPASS_TEST_PASSWORD
+export VIBEPASS_TEST_PASSWORD
+# For --two-factor, set VIBEPASS_TEST_TOTP_FILE to a new file in a private directory.
+node scripts/dev/register-account.mjs http://127.0.0.1:8000 live@example.test
+node scripts/dev/seed-vault.mjs http://127.0.0.1:8000 live@example.test \
   http://127.0.0.1:8090/login            # add --two-factor on a second account to test 2FA
 npm run build:chrome
-node scripts/dev/live-check.mjs http://127.0.0.1:8000 live@example.test 'live test password'
-node scripts/dev/inline-menu-check.mjs http://127.0.0.1:8000 live@example.test 'live test password'
-node scripts/dev/write-check.mjs http://127.0.0.1:8000 live@example.test 'live test password'
-node scripts/dev/passkey-check.mjs http://127.0.0.1:8000 live@example.test 'live test password'
+node scripts/dev/live-check.mjs http://127.0.0.1:8000 live@example.test
+node scripts/dev/inline-menu-check.mjs http://127.0.0.1:8000 live@example.test
+node scripts/dev/write-check.mjs http://127.0.0.1:8000 live@example.test
+node scripts/dev/passkey-check.mjs http://127.0.0.1:8000 live@example.test
 ```
 
 `write-check.mjs` writes to the vault (create, edit, conflicts, folders, trash, the save banner)

@@ -77,7 +77,10 @@ async function writeClipboard(text: string): Promise<void> {
       });
   }
   const request: OffscreenRequest = { source: 'vibepass', type: 'offscreen:write-clipboard', text };
-  await browser.runtime.sendMessage(request);
+  const reply: unknown = await browser.runtime.sendMessage(request);
+  if (!reply || typeof reply !== 'object' || !('ok' in reply) || reply.ok !== true) {
+    throw new Error('Could not write the clipboard');
+  }
 }
 
 interface ChromeOffscreen {
@@ -90,7 +93,7 @@ const clipboard = createClipboard({
   clearAfterSeconds: async () => (await settings()).clipboardClearSeconds,
   now: () => Date.now(),
   alarms: {
-    create: (name, info) => void browser.alarms.create(name, info),
+    create: (name, info) => browser.alarms.create(name, info),
     clear: (name) => browser.alarms.clear(name),
   },
   store: {
@@ -172,10 +175,8 @@ browser.commands.onCommand.addListener((command, tab) => {
     if (tabId !== undefined) {
       try {
         filled = await autofill.fillBest(tabId);
-      } catch (error) {
-        log.warn('fill shortcut failed', {
-          reason: error instanceof Error ? error.message : 'unknown',
-        });
+      } catch {
+        log.warn('fill shortcut failed');
       }
     }
     // Locked, no match, or the item needs the master password: show the popup instead.

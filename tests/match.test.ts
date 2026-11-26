@@ -91,7 +91,7 @@ describe('URI matching', () => {
     expect(isInsecureDowngrade([uri('https://example.com')], page('http://example.com/'))).toBe(
       true,
     );
-    expect(isInsecureDowngrade([uri('example.com')], page('http://example.com/'))).toBe(false);
+    expect(isInsecureDowngrade([uri('example.com')], page('http://example.com/'))).toBe(true);
     expect(isInsecureDowngrade([uri('http://example.com')], page('http://example.com/'))).toBe(
       false,
     );

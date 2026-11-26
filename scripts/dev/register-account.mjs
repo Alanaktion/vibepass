@@ -3,7 +3,7 @@
  * Registers a test account on a local Vaultwarden server, with keys made by Bitwarden's SDK.
  * Dev and test use only.
  *
- *   node scripts/dev/register-account.mjs <serverUrl> <email> <password> [pbkdf2|argon2id]
+ *   node scripts/dev/register-account.mjs <serverUrl> <email> [pbkdf2|argon2id]
  *
  * For a self-signed local server, run with NODE_EXTRA_CA_CERTS=<cert.pem>.
  */
@@ -12,9 +12,12 @@ import { createRequire } from 'node:module';
 import { webcrypto } from 'node:crypto';
 import * as glue from '@bitwarden/sdk-internal/bitwarden_wasm_internal_bg.js';
 
-const [serverUrl, email, password, kdfName = 'pbkdf2'] = process.argv.slice(2);
+const password = process.env.VIBEPASS_TEST_PASSWORD;
+const [serverUrl, email, kdfName = 'pbkdf2'] = process.argv.slice(2);
 if (!serverUrl || !email || !password) {
-  console.error('usage: register-account.mjs <serverUrl> <email> <password> [pbkdf2|argon2id]');
+  console.error(
+    'Set VIBEPASS_TEST_PASSWORD and run: register-account.mjs <serverUrl> <email> [pbkdf2|argon2id]',
+  );
   process.exit(2);
 }
 
@@ -74,5 +77,5 @@ const res = await fetch(`${baseUrl}/identity/accounts/register/finish`, {
   headers: { 'content-type': 'application/json' },
   body: JSON.stringify(body),
 });
-console.log(String(res.status), res.ok ? 'registered' : await res.text());
+console.log(String(res.status), res.ok ? 'registered' : 'registration failed');
 if (!res.ok) process.exit(1);

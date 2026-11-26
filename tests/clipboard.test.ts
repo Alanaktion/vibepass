@@ -8,7 +8,7 @@ import {
 import { CLIPBOARD_ALARM, createClipboard } from '../src/background/clipboard';
 import { DEFAULT_SETTINGS } from '../src/storage/settings';
 
-function clipboardHarness(seconds = 30) {
+function clipboardHarness(seconds = 30, failFirstClear = false) {
   let now = 1_000_000;
   const store = new Map<string, unknown>();
   const timers: { fn: () => void; ms: number }[] = [];
@@ -16,6 +16,10 @@ function clipboardHarness(seconds = 30) {
   const alarms = { create: vi.fn(), clear: vi.fn() };
   const clipboard = createClipboard({
     write: (text) => {
+      if (text === '' && failFirstClear) {
+        failFirstClear = false;
+        return Promise.reject(new Error('clipboard busy'));
+      }
       writes.push(text);
       return Promise.resolve();
     },
@@ -61,6 +65,17 @@ describe('clipboard clearing', () => {
     h.advance(61_000);
     expect(await h.clipboard.clearIfDue()).toBe(true);
     expect(h.writes).toEqual(['']);
+  });
+
+  it('retains the deadline and retries a failed clipboard write', async () => {
+    const h = clipboardHarness(10, true);
+    await h.clipboard.copy('temporary');
+    h.advance(10_000);
+    expect(await h.clipboard.clearIfDue()).toBe(false);
+    expect(h.store.size).toBe(1);
+    expect(h.alarms.create).toHaveBeenLastCalledWith(CLIPBOARD_ALARM, { when: 1_040_000 });
+    expect(await h.clipboard.clearIfDue()).toBe(true);
+    expect(h.store.size).toBe(0);
   });
 
   it('does nothing when clearing is off', async () => {

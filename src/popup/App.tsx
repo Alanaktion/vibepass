@@ -75,6 +75,14 @@ export function App() {
     setToast({ message, at: Date.now() });
   }, []);
 
+  const askPassword = useCallback(
+    () =>
+      new Promise<string | null>((resolve) => {
+        setDialog({ kind: 'password', resolve });
+      }),
+    [],
+  );
+
   const ctx = useMemo<PopupContext | null>(
     () =>
       status && {
@@ -83,16 +91,13 @@ export function App() {
         settings,
         tab,
         toast: showToast,
-        askPassword: () =>
-          new Promise<string | null>((resolve) => {
-            setDialog({ kind: 'password', resolve });
-          }),
+        askPassword,
         confirm: (message, confirmLabel) =>
           new Promise<boolean>((resolve) => {
             setDialog({ kind: 'confirm', message, confirmLabel, resolve });
           }),
       },
-    [status, settings, tab, showToast],
+    [status, settings, tab, showToast, askPassword],
   );
 
   const back = useCallback(() => {

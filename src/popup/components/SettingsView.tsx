@@ -214,9 +214,9 @@ export function SettingsView({ onBack, onSettings, onOpen }: Props) {
           <label class="check">
             <input
               type="checkbox"
-              checked={settings.showIcons}
+              checked={settings.useServerIcons}
               onChange={(e) => {
-                save({ showIcons: e.currentTarget.checked });
+                save({ useServerIcons: e.currentTarget.checked });
               }}
             />
             Show website icons (loaded from your server)

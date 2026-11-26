@@ -140,12 +140,14 @@ describe('two-step login', () => {
     });
     expect(status.state).toBe('unlocked');
     expect(server.forms.at(-1)?.get('twoFactorToken')).toBe('123456');
-    expect([...deps.stored.remembered.values()]).toEqual(['remember-1']);
+    expect([...deps.stored.remembered.values()]).toEqual([expect.stringMatching(/^2\./)]);
 
-    // Next login skips the code with the remember token.
-    await service.logout();
+    // The encrypted token works until explicit logout.
+    await service.lock();
     await service.login(LOGIN);
     expect(server.forms.at(-1)?.get('twoFactorProvider')).toBe('5');
+    await service.logout();
+    expect(await codeOf(service.login(LOGIN))).toBe('two-factor-required');
   });
 
   it('forgets a remember token the server no longer accepts', async () => {
@@ -258,7 +260,8 @@ describe('item access', () => {
     server.sync = structuredClone(fixture.sync);
     server.sync.ciphers.find((c) => c.id === loginId)!.reprompt = 1;
     await service.login(LOGIN);
-    expect((await service.item(loginId)).reprompt).toBe(true);
+    expect(await codeOf(service.item(loginId))).toBe('reprompt-required');
+    expect((await service.item(loginId, LOGIN.masterPassword)).reprompt).toBe(true);
     expect(await codeOf(service.reveal(loginId, 'login.password'))).toBe('reprompt-required');
     await expect(service.reveal(loginId, 'login.password', 'wrong')).rejects.toThrow(
       'Incorrect master password',

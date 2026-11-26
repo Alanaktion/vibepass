@@ -5,7 +5,7 @@
  * pages: a single-page login, a multi-step login (username, then password), a split login in a
  * scrolled and transformed layout, and a field with no autocomplete hint.
  *
- *   node scripts/dev/inline-menu-check.mjs <serverUrl> <email> <password> [screenshotDir]
+ *   node scripts/dev/inline-menu-check.mjs <serverUrl> <email>
  *
  * The page server listens on 127.0.0.1:8090, which is what seed-vault.mjs saved the logins for.
  */
@@ -19,16 +19,17 @@ import { createRequire } from 'node:module';
 /** @type {typeof import('playwright')} */
 const { chromium } = createRequire(import.meta.url)('playwright');
 
-const [serverUrl, email, password, shots] = process.argv.slice(2);
+const password = process.env.VIBEPASS_TEST_PASSWORD;
+const [serverUrl, email] = process.argv.slice(2);
 if (!serverUrl || !email || !password) {
-  console.error('usage: inline-menu-check.mjs <serverUrl> <email> <password> [screenshotDir]');
+  console.error('Set VIBEPASS_TEST_PASSWORD and run: inline-menu-check.mjs <serverUrl> <email>');
   process.exit(2);
 }
 const root = fileURLToPath(new URL('../..', import.meta.url));
-const results = /** @type {[string, boolean, string][]} */ ([]);
-const check = (/** @type {string} */ name, /** @type {boolean} */ ok, detail = '') => {
-  results.push([name, ok, detail]);
-  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `  (${detail})` : ''}`);
+const results = /** @type {[string, boolean][]} */ ([]);
+const check = (/** @type {string} */ name, /** @type {boolean} */ ok) => {
+  results.push([name, ok]);
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`);
 };
 
 const SEEN = `<script>
@@ -102,10 +103,6 @@ const menuBox = async (page) => {
 };
 /** @param {import('playwright').Page} page */
 const seen = (page) => page.evaluate(() => /** @type {any} */ (window).seen);
-/** @param {import('playwright').Page} page @param {string} name */
-const shot = async (page, name) => {
-  if (shots) await page.screenshot({ path: join(shots, `${name}.png`) });
-};
 
 try {
   await popup.getByLabel('Server URL').fill(serverUrl);
@@ -130,7 +127,6 @@ try {
     'browser form history is off while the menu is open',
     (await site.getAttribute('#u', 'autocomplete')) === 'off',
   );
-  await shot(site, 'inline-menu');
   await site.keyboard.press('ArrowDown');
   await site.keyboard.press('Enter');
   await site.waitForFunction(() => /** @type {any} */ (window).seen.p);
@@ -160,7 +156,6 @@ try {
   await site.click('#next');
   await site.locator('#p').waitFor();
   box = await menuBox(site);
-  await shot(site, 'inline-menu-step-2');
   await site.keyboard.press('ArrowDown');
   await site.keyboard.press('Enter');
   await site.waitForFunction(() => /** @type {any} */ (window).seen.p);
@@ -175,7 +170,6 @@ try {
   check(
     'menu follows a transformed, scrolled field',
     Math.abs(box.y - (pw.y + pw.height + 4)) < 2 && Math.abs(box.x - Math.max(pw.x, 4)) < 2,
-    `menu ${String(Math.round(box.x))},${String(Math.round(box.y))} field ${String(Math.round(pw.x))},${String(Math.round(pw.y + pw.height))}`,
   );
   await site.mouse.wheel(0, 120);
   await site.waitForTimeout(150);
@@ -209,7 +203,6 @@ try {
   await site.reload();
   await site.click('#p');
   await menuBox(site);
-  await shot(site, 'inline-menu-locked');
   check('locked vault shows an unlock row', true);
 
   // Turned off in settings: no menu.
@@ -219,8 +212,8 @@ try {
   await site.click('#p');
   await site.waitForTimeout(400);
   check('setting turns the menu off', (await site.locator('vibepass-menu').count()) === 0);
-} catch (error) {
-  check('run', false, error instanceof Error ? error.message : String(error));
+} catch {
+  check('run', false);
 } finally {
   await context.close();
   pages.close();

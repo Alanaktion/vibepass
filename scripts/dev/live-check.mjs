@@ -4,7 +4,7 @@
  * Vaultwarden seeded by seed-vault.mjs, and a local login page. Dev use only; needs Playwright
  * (not a project dependency).
  *
- *   node scripts/dev/live-check.mjs <serverUrl> <email> <password> [twoFactorEmail twoFactorSecret]
+ *   node scripts/dev/live-check.mjs <serverUrl> <email> [twoFactorEmail]
  *
  * The page server listens on 127.0.0.1:8090, which is what seed-vault.mjs saved the logins for.
  */
@@ -20,16 +20,25 @@ import { generateTotp } from '../../src/vault/totp.ts';
 /** @type {typeof import('playwright')} */
 const { chromium } = createRequire(import.meta.url)('playwright');
 
-const [serverUrl, email, password, tfaEmail, tfaSecret] = process.argv.slice(2);
+const password = process.env.VIBEPASS_TEST_PASSWORD;
+const [serverUrl, email, tfaEmail] = process.argv.slice(2);
+const tfaSecret =
+  tfaEmail && process.env.VIBEPASS_TEST_TOTP_FILE
+    ? (await readFile(process.env.VIBEPASS_TEST_TOTP_FILE, 'utf8')).trim()
+    : null;
+if (tfaEmail && !tfaSecret)
+  throw new Error('Set VIBEPASS_TEST_TOTP_FILE for the two-step test account');
 if (!serverUrl || !email || !password) {
-  console.error('usage: live-check.mjs <serverUrl> <email> <password> [2faEmail 2faSecret]');
+  console.error(
+    'Set VIBEPASS_TEST_PASSWORD and run: live-check.mjs <serverUrl> <email> [2faEmail]',
+  );
   process.exit(2);
 }
 const root = fileURLToPath(new URL('../..', import.meta.url));
-const results = /** @type {[string, boolean, string][]} */ ([]);
-const check = (/** @type {string} */ name, /** @type {boolean} */ ok, detail = '') => {
-  results.push([name, ok, detail]);
-  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `  (${detail})` : ''}`);
+const results = /** @type {[string, boolean][]} */ ([]);
+const check = (/** @type {string} */ name, /** @type {boolean} */ ok) => {
+  results.push([name, ok]);
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`);
 };
 
 // A login page with a React-style controlled form: it only sees values set through input events.
@@ -92,26 +101,15 @@ try {
   let start = Date.now();
   await popup.getByRole('button', { name: 'Log in' }).click();
   await popup.getByLabel('Search vault').waitFor();
-  check('log in and first sync', true, `${String(Date.now() - start)} ms`);
+  check('log in and first sync', true);
 
   const status = /** @type {any} */ (await send('vault:status', undefined)).data;
-  check(
-    'all items decrypted, including the organization',
-    status.itemCount === 5,
-    `${String(status.itemCount)} items`,
-  );
+  check('all items decrypted, including the organization', status.itemCount === 5);
 
   const hits = /** @type {any} */ (
     await send('vault:search', { query: '', url: 'http://127.0.0.1:8090/login' })
   ).data;
-  check(
-    'current site first',
-    hits[0]?.name === 'Local Test Site' && hits[0].siteMatch,
-    hits
-      .slice(0, 3)
-      .map((/** @type {any} */ h) => h.name)
-      .join(', '),
-  );
+  check('current site first', hits[0]?.name === 'Local Test Site' && hits[0].siteMatch);
   const fuzzy = /** @type {any} */ (await send('vault:search', { query: 'wiki', url: undefined }))
     .data;
   check('fuzzy search finds the shared item', fuzzy[0]?.name === 'Team Wiki');
@@ -132,14 +130,13 @@ try {
   check('reveal password', revealed === 'correct-horse-42');
   const totp = /** @type {any} */ (await send('vault:totp', { id: login.id })).data;
   const expected = (await generateTotp('JBSWY3DPEHPK3PXP', Date.now())).code;
-  check('TOTP code matches', totp.code === expected, `${String(totp.remaining)} s left`);
+  check('TOTP code matches', totp.code === expected);
   const file = /** @type {any} */ (
     await send('vault:attachment', { id: login.id, attachmentId: detail.attachments[0]?.id })
   ).data;
   check(
     'attachment downloads and decrypts',
     Buffer.from(file?.base64 ?? '', 'base64').toString() === 'hello from an attachment\n',
-    file?.fileName,
   );
 
   const shared = fuzzy[0];
@@ -172,7 +169,6 @@ try {
   check(
     'fill sets username and password through input events',
     seen.u === 'alice@example.test' && seen.p === 'correct-horse-42',
-    JSON.stringify(fill.data),
   );
   const mismatch = /** @type {any} */ (
     await send('autofill:fill', { tabId, id: bank.id, masterPassword: password })
@@ -181,10 +177,10 @@ try {
 
   await site.bringToFront();
   const copied = await site.evaluate(() => navigator.clipboard.readText());
-  check('TOTP copied after fill', copied === expected || /^\d{6}$/.test(copied), copied);
+  check('TOTP copied after fill', copied === expected || /^\d{6}$/.test(copied));
   await new Promise((r) => setTimeout(r, 11_000));
   const cleared = await site.evaluate(() => navigator.clipboard.readText());
-  check('clipboard cleared after the timeout', cleared === '', JSON.stringify(cleared));
+  check('clipboard cleared after the timeout', cleared === '');
 
   await send('vault:lock', undefined);
   await site.reload();
@@ -192,11 +188,7 @@ try {
   const unlocked = /** @type {any} */ (await send('vault:unlock', { masterPassword: password }));
   const again = /** @type {any} */ (await send('autofill:fill', { tabId, id: login.id }));
   const unlockToFill = Date.now() - start;
-  check(
-    'unlock to filled form under 3 s',
-    unlocked.ok && again.ok && unlockToFill < 3000,
-    `${String(unlockToFill)} ms`,
-  );
+  check('unlock to filled form under 3 s', unlocked.ok && again.ok && unlockToFill < 3000);
 
   // Worker restart keeps the vault unlocked (storage.session).
   const before = /** @type {any} */ (await send('vault:status', undefined)).data.state;
@@ -212,11 +204,7 @@ try {
     const first = /** @type {any} */ (
       await send('vault:login', { serverUrl, email: tfaEmail, masterPassword: password })
     );
-    check(
-      'two-step login asks for a code',
-      first.code === 'two-factor-required',
-      JSON.stringify(first.details),
-    );
+    check('two-step login asks for a code', first.code === 'two-factor-required');
     const code = (await generateTotp(tfaSecret, Date.now())).code;
     const second = /** @type {any} */ (
       await send('vault:login', {
@@ -229,38 +217,15 @@ try {
     check(
       'two-step login with an authenticator code',
       second.ok && second.data.state === 'unlocked',
-      second.error ?? '',
     );
     await send('vault:logout', undefined);
     const third = /** @type {any} */ (
       await send('vault:login', { serverUrl, email: tfaEmail, masterPassword: password })
     );
-    check('remembered browser skips the code', third.ok, third.error ?? '');
+    check('logout forgets the remembered browser', third.code === 'two-factor-required');
   }
-
-  // Screenshots of the popup for review.
-  const shots = process.env.SHOTS;
-  if (shots) {
-    // Vaultwarden rate-limits logins, so come back to the first account with an offline unlock.
-    if (tfaEmail) await send('vault:login', { serverUrl, email, masterPassword: password });
-    await send('vault:unlock', { masterPassword: password });
-    await popup.setViewportSize({ width: 360, height: 560 });
-    await popup.reload();
-    await popup.getByLabel('Search vault').waitFor();
-    await popup.waitForTimeout(300);
-    await popup.screenshot({ path: join(shots, 'quick-find.png') });
-    await popup.getByText('Local Test Site').click();
-    await popup.getByText('Recovery PIN').waitFor();
-    await popup.getByRole('button', { name: 'Reveal Password', exact: true }).click();
-    await popup.waitForTimeout(300);
-    await popup.screenshot({ path: join(shots, 'item.png') });
-  }
-} catch (error) {
-  check(
-    'unexpected error',
-    false,
-    `${String(error)}\n${await popup.innerText('body').catch(() => '')}`,
-  );
+} catch {
+  check('unexpected error', false);
 } finally {
   await context.close();
   pages.close();

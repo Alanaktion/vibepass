@@ -125,7 +125,9 @@ export function matchItem(uris: readonly LoginUri[], page: ParsedPage | null): M
 export function isInsecureDowngrade(uris: readonly LoginUri[], page: ParsedPage): boolean {
   if (page.url.protocol !== 'http:') return false;
   const matching = uris.filter((uri) => matchUri(uri, page) !== MatchQuality.None);
-  return matching.length > 0 && matching.every((uri) => /^https:\/\//i.test(uri.uri.trim()));
+  return (
+    matching.length > 0 && matching.every((uri) => parseSaved(uri.uri)?.url.protocol !== 'http:')
+  );
 }
 
 /**

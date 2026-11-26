@@ -6,7 +6,7 @@
  * read back with Bitwarden's own cipher code from a separate login. It writes to the vault, so
  * only run it against a throwaway server.
  *
- *   node scripts/dev/passkey-check.mjs <serverUrl> <email> <password> [screenshotDir]
+ *   node scripts/dev/passkey-check.mjs <serverUrl> <email>
  *
  * The test site listens on localhost:8091 (WebAuthn needs https or localhost).
  */
@@ -23,17 +23,18 @@ const require = createRequire(import.meta.url);
 /** @type {typeof import('playwright')} */
 const { chromium } = require('playwright');
 
-const [serverUrl, email, password, shots] = process.argv.slice(2);
+const password = process.env.VIBEPASS_TEST_PASSWORD;
+const [serverUrl, email] = process.argv.slice(2);
 if (!serverUrl || !email || !password) {
-  console.error('usage: passkey-check.mjs <serverUrl> <email> <password> [screenshotDir]');
+  console.error('Set VIBEPASS_TEST_PASSWORD and run: passkey-check.mjs <serverUrl> <email>');
   process.exit(2);
 }
 const base = serverUrl.replace(/\/+$/, '');
 const root = fileURLToPath(new URL('../..', import.meta.url));
-const results = /** @type {[string, boolean, string][]} */ ([]);
-const check = (/** @type {string} */ name, /** @type {boolean} */ ok, detail = '') => {
-  results.push([name, ok, detail]);
-  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `  (${detail})` : ''}`);
+const results = /** @type {[string, boolean][]} */ ([]);
+const check = (/** @type {string} */ name, /** @type {boolean} */ ok) => {
+  results.push([name, ok]);
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`);
 };
 
 // ---- Bitwarden's own client code, logged in separately, to read back what Vibepass wrote ----
@@ -50,7 +51,7 @@ const enc = new TextEncoder();
 async function call(path, init = {}) {
   const res = await fetch(`${base}${path}`, init);
   const text = await res.text();
-  if (!res.ok) throw new Error(`${path}: ${String(res.status)} ${text}`);
+  if (!res.ok) throw new Error(`${path}: ${String(res.status)}`);
   return text ? JSON.parse(text) : null;
 }
 
@@ -228,9 +229,6 @@ const send = (/** @type {string} */ type, /** @type {unknown} */ payload) =>
     ([t, p]) => chrome.runtime.sendMessage({ source: 'vibepass', type: t, payload: p }),
     /** @type {const} */ ([type, payload]),
   );
-const shot = async (/** @type {import('playwright').Page} */ page, /** @type {string} */ name) => {
-  if (shots) await page.screenshot({ path: join(shots, name) });
-};
 
 try {
   await popup.getByLabel('Server URL', { exact: true }).fill(serverUrl);
@@ -264,10 +262,9 @@ try {
     'the prompt is in a closed shadow root',
     await page.evaluate(() => document.querySelector('vibepass-passkey')?.shadowRoot === null),
   );
-  await shot(page, 'passkey-save.png');
   await page.keyboard.press('Enter');
   const created = await result();
-  check('new passkey verifies on the site', created.ok === true, JSON.stringify(created));
+  check('new passkey verifies on the site', created.ok === true);
   check('credProps reports a discoverable passkey', created.rk === true);
   const saved = await officialPasskeys();
   const view = saved.find((v) => v.login.fido2Credentials.some((p) => p.rpId === 'localhost'));
@@ -283,16 +280,14 @@ try {
       stored.discoverable === 'true' &&
       stored.userName === 'pk-user@example.test' &&
       stored.userHandle === Buffer.from('user-1234').toString('base64url'),
-    view?.name ?? 'not found',
   );
 
   // Sign in: pick the passkey with Enter.
   await page.click('#signin');
   await prompt();
-  await shot(page, 'passkey-signin.png');
   await page.keyboard.press('Enter');
   const signedIn = await result();
-  check('sign-in with the saved passkey verifies', signedIn.ok === true, JSON.stringify(signedIn));
+  check('sign-in with the saved passkey verifies', signedIn.ok === true);
   check('the sign-in used the new passkey', signedIn.id === created.id);
 
   // Escape cancels, like the browser's own sheet.
@@ -334,7 +329,6 @@ try {
     native.ok === true &&
       native.id !== created.id &&
       (await officialPasskeys()).length === saved.length,
-    JSON.stringify(native),
   );
 
   // With editing off, Vibepass stays out of the way of new passkeys, but still signs in.
@@ -351,7 +345,6 @@ try {
   await send('vault:lock');
   await page.click('#signin');
   await prompt();
-  await shot(page, 'passkey-locked.png');
   await page.keyboard.press('Tab');
   await page.keyboard.press('Tab');
   await page.keyboard.press('Enter');
@@ -359,10 +352,9 @@ try {
   check(
     'while locked, "another device" signs in with the browser',
     lockedResult.ok === true && lockedResult.id !== created.id,
-    JSON.stringify(lockedResult),
   );
-} catch (error) {
-  check('no unexpected errors', false, error instanceof Error ? error.message : String(error));
+} catch {
+  check('no unexpected errors', false);
 } finally {
   await context.close();
   site.close();

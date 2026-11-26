@@ -69,7 +69,11 @@ describe('autofill', () => {
       code: 'fill-mismatch',
     });
     expect(sent.some((m) => m.type === 'content:fill')).toBe(false);
-    await autofill.fill({ tabId: 7, id: loginId, force: true });
+    await expect(
+      autofill.fill({ tabId: 7, id: loginId, confirmedOrigin: 'https://previous.test' }),
+    ).rejects.toThrow('page changed');
+    expect(sent.some((m) => m.type === 'content:fill')).toBe(false);
+    await autofill.fill({ tabId: 7, id: loginId, confirmedOrigin: 'https://evil.test' });
     expect(sent.some((m) => m.type === 'content:fill')).toBe(true);
   });
 

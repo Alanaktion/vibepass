@@ -10,6 +10,15 @@ describe('normalizeBaseUrl', () => {
     );
   });
 
+  it('requires HTTPS except for loopback', () => {
+    for (const host of ['localhost', '127.0.0.1', '[::1]']) {
+      expect(normalizeBaseUrl(`http://${host}:8000`)).toBe(`http://${host}:8000`);
+    }
+    for (const host of ['vault.example.com', '127.0.0.1.example.com', 'localhost.example']) {
+      expect(() => normalizeBaseUrl(`http://${host}`)).toThrow('HTTPS');
+    }
+  });
+
   it('rejects non-http schemes', () => {
     expect(() => normalizeBaseUrl('ftp://example.com')).toThrow();
   });
@@ -61,6 +70,7 @@ describe('ApiClient', () => {
     });
     const form = new URLSearchParams(requests[0]!.init!.body as string);
     expect(requests[0]!.url).toBe('https://vault.example.com/identity/connect/token');
+    expect(requests[0]!.init!.redirect).toBe('error');
     expect(Object.fromEntries(form)).toEqual({
       grant_type: 'password',
       username: 'me@example.com',

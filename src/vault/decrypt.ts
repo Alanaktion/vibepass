@@ -240,7 +240,7 @@ async function decryptSummary(
       hasTotp: Boolean(cipher.login?.totp),
       reprompt: cipher.reprompt === 1,
     },
-    notes: await maybe(cipher.notes),
+    notes: cipher.reprompt === 1 ? null : await maybe(cipher.notes),
   };
 }
 

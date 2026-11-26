@@ -51,7 +51,7 @@ export const SAVE_PROMPT_MS = 2 * 60_000;
 export interface FillRequest {
   tabId: number;
   id: string;
-  force?: boolean | undefined;
+  confirmedOrigin?: string | undefined;
   masterPassword?: string | undefined;
 }
 
@@ -110,19 +110,22 @@ export function createAutofill(deps: AutofillDeps) {
     const info = await inspect(request.tabId);
     const page = parseUri(info.url);
     if (!page) throw new Error('Vibepass only fills web pages');
-    if (!request.force) {
+    if (request.confirmedOrigin !== undefined && request.confirmedOrigin !== page.url.origin) {
+      throw new Error('The page changed. Start the fill again.');
+    }
+    if (request.confirmedOrigin === undefined) {
       if (matchItem(summary.uris, page) === MatchQuality.None) {
         throw new CodedError(
-          `“${summary.name}” isn’t saved for ${page.url.hostname}`,
+          `“${summary.name}” isn’t saved for ${page.url.origin}`,
           'fill-mismatch',
-          { host: page.url.hostname },
+          { origin: page.url.origin },
         );
       }
       if (isInsecureDowngrade(summary.uris, page)) {
         throw new CodedError(
-          `${page.url.hostname} isn’t using a secure connection, but this login is saved for https`,
+          `${page.url.origin} isn’t using a secure connection, but this login is saved for https`,
           'fill-mismatch',
-          { host: page.url.hostname },
+          { origin: page.url.origin },
         );
       }
     }

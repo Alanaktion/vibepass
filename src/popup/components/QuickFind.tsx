@@ -179,7 +179,7 @@ export function QuickFind({ onOpen, onSettings, onNew, onGenerator, query, onQue
               >
                 <ItemIcon
                   name={item.name}
-                  src={settings?.showIcons ? iconUrl(status.serverUrl, itemHost) : null}
+                  src={settings?.useServerIcons ? iconUrl(status.serverUrl, itemHost) : null}
                 />
                 <span class="text">
                   <span class="name">

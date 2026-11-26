@@ -120,8 +120,8 @@ async function refreshState(): Promise<InlineMenuState | null> {
   try {
     cachedState = await sendMessage('autofill:menu');
     offerToSave = cachedState.state === 'unlocked' && cachedState.offerToSave === true;
-  } catch (error) {
-    log.debug('inline menu unavailable', { reason: error instanceof Error ? error.message : '' });
+  } catch {
+    log.debug('inline menu unavailable');
     cachedState = null;
   }
   return cachedState;
@@ -321,8 +321,8 @@ export async function captureSubmit(scope: HTMLFormElement | Document): Promise<
   try {
     const prompt = await sendMessage('autofill:submitted', login);
     if (prompt) banner.show(prompt);
-  } catch (error) {
-    log.debug('save check failed', { reason: error instanceof Error ? error.message : '' });
+  } catch {
+    log.debug('save check failed');
   }
 }
 
@@ -401,8 +401,8 @@ function main(): void {
   sendMessage('autofill:page-ready', {
     url: location.href,
     loginForms: countLoginForms(),
-  }).catch((error: unknown) => {
-    log.error('page-ready failed', error);
+  }).catch(() => {
+    log.error('page-ready failed');
   });
 }
 

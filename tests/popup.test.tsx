@@ -262,7 +262,9 @@ describe('popup', () => {
     let forced = false;
     backend(base, {
       'autofill:fill': (payload) => {
-        if ((payload as { force?: boolean }).force) {
+        if (
+          (payload as { confirmedOrigin?: string }).confirmedOrigin === 'https://login.example.com'
+        ) {
           forced = true;
           return { ok: true, data: { filled: ['password'], copiedTotp: false } };
         }
@@ -270,6 +272,7 @@ describe('popup', () => {
           ok: false,
           error: '“Other” isn’t saved for login.example.com',
           code: 'fill-mismatch',
+          details: { origin: 'https://login.example.com' },
         };
       },
     });

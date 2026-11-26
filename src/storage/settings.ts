@@ -9,7 +9,7 @@ export interface Settings {
   /** Seconds before a copied secret is cleared from the clipboard. 0 turns clearing off. */
   clipboardClearSeconds: number;
   /** Show website icons from your server's icon service (it sees which sites you have). */
-  showIcons: boolean;
+  useServerIcons: boolean;
   /** After filling a login that has a one-time password, copy the code. */
   autoCopyTotp: boolean;
   /** Show a menu of matching logins under login fields on web pages. */
@@ -32,7 +32,7 @@ export const DEFAULT_SETTINGS: Settings = {
   lockAfterMinutes: 15,
   lockOnSystemLock: true,
   clipboardClearSeconds: 30,
-  showIcons: true,
+  useServerIcons: false,
   autoCopyTotp: true,
   inlineMenu: true,
   allowEdits: false,
