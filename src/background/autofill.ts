@@ -72,10 +72,10 @@ export function createAutofill(deps: AutofillDeps) {
 
   /** Logins saved for the page, ranked, with the one just filled in this tab first. */
   function loginsFor(tabId: number, url: string) {
-    const page = parseUri(url);
+    const page = deps.search.pageFor(url);
     if (!page) return [];
     const matches = deps.search
-      .matchesFor(url)
+      .matchesFor(url, true)
       .filter((m) => m.type === CipherType.Login && !isInsecureDowngrade(m.uris, page));
     const last = recentFor(tabId);
     const index = matches.findIndex((m) => m.id === last);
@@ -108,7 +108,7 @@ export function createAutofill(deps: AutofillDeps) {
     if (summary.type !== CipherType.Login) throw new Error('Only logins can be filled for now');
 
     const info = await inspect(request.tabId);
-    const page = parseUri(info.url);
+    const page = deps.search.pageFor(info.url);
     if (!page) throw new Error('Vibepass only fills web pages');
     if (request.confirmedOrigin !== undefined && request.confirmedOrigin !== page.url.origin) {
       throw new Error('The page changed. Start the fill again.');

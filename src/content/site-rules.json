@@ -1,0 +1,8 @@
+[
+  {
+    "origin": "https://github.com",
+    "path": "/signup",
+    "selector": "input[type=password][name='user[password]']",
+    "autocomplete": "new-password"
+  }
+]

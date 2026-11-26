@@ -329,6 +329,9 @@ describe('popup', () => {
       });
     });
     expect(await screen.findByLabelText('Search vault')).toBeTruthy();
+    expect(screen.getByText('Your vault is ready')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Got it' }));
+    expect(screen.queryByText('Your vault is ready')).toBeNull();
   });
 
   describe('editing', () => {

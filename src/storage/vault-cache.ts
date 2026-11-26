@@ -1,5 +1,7 @@
 import type { SyncResponse } from '../api/types';
 
+export type CachedVault = Omit<SyncResponse, 'domains'> & { encryptedDomains?: string };
+
 /**
  * Encrypted vault cache in IndexedDB for fast cold start and offline unlock.
  * Stores the sync response exactly as the server sent it (still encrypted). No plaintext.
@@ -48,10 +50,10 @@ async function run<T>(
 }
 
 export const vaultCache = {
-  async read(userId: string): Promise<SyncResponse | null> {
-    return (await run<SyncResponse | undefined>('readonly', (s) => s.get(userId))) ?? null;
+  async read(userId: string): Promise<CachedVault | null> {
+    return (await run<CachedVault | undefined>('readonly', (s) => s.get(userId))) ?? null;
   },
-  async write(userId: string, sync: SyncResponse): Promise<void> {
+  async write(userId: string, sync: CachedVault): Promise<void> {
     await run('readwrite', (s) => s.put(sync, userId));
   },
   async clear(userId: string): Promise<void> {

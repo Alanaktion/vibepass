@@ -16,10 +16,15 @@ export interface SearchOptions {
 }
 
 export interface SearchIndex {
-  replaceAll(items: readonly CipherSummary[], notes?: ReadonlyMap<string, string>): void;
+  replaceAll(
+    items: readonly CipherSummary[],
+    notes?: ReadonlyMap<string, string>,
+    groups?: unknown,
+  ): void;
   search(query: string, options?: SearchOptions): SearchHit[];
   /** Items saved for a page, best match first. Used by autofill. */
-  matchesFor(url: string): SearchHit[];
+  matchesFor(url: string, includeEquivalents?: boolean): SearchHit[];
+  pageFor(url: string): ReturnType<typeof parseUri>;
   clear(): void;
 }
 
@@ -66,11 +71,35 @@ export function createSearchIndex(): SearchIndex {
   let byId = new Map<string, CipherSummary>();
   let ordered: CipherSummary[] = [];
 
+  let equivalents: Set<string>[] = [];
+  function pageFor(url: string) {
+    const page = parseUri(url);
+    if (page) {
+      // Only groups containing this page count. Overlaps do not imply transitive matches.
+      for (const group of equivalents) {
+        if (!group.has(page.domain)) continue;
+        page.equivalents = page.equivalents ? new Set([...page.equivalents, ...group]) : group;
+      }
+    }
+    return page;
+  }
+
   const rank = (item: CipherSummary, page: ReturnType<typeof parseUri>) =>
     matchScore(item.uris, page);
 
   return {
-    replaceAll(items, notes) {
+    pageFor,
+    replaceAll(items, notes, groups) {
+      equivalents = [];
+      if (Array.isArray(groups)) {
+        for (const group of groups) {
+          if (!Array.isArray(group)) continue;
+          const domains = group
+            .filter((d): d is string => typeof d === 'string')
+            .map((d) => d.trim().toLowerCase());
+          equivalents.push(new Set(domains));
+        }
+      }
       mini = createMiniSearch();
       byId = new Map(items.map((item) => [item.id, item]));
       ordered = [...items];
@@ -87,7 +116,7 @@ export function createSearchIndex(): SearchIndex {
 
     search(query, options = {}) {
       const limit = options.limit ?? DEFAULT_LIMIT;
-      const page = options.url ? parseUri(options.url) : null;
+      const page = options.url ? pageFor(options.url) : null;
       const needle = query.trim();
 
       let scored: { item: CipherSummary; score: number }[];
@@ -108,8 +137,8 @@ export function createSearchIndex(): SearchIndex {
       return ranked.slice(0, limit).map(({ item, site }) => ({ ...item, siteMatch: site > 0 }));
     },
 
-    matchesFor(url) {
-      const page = parseUri(url);
+    matchesFor(url, includeEquivalents = false) {
+      const page = includeEquivalents ? pageFor(url) : parseUri(url);
       if (!page) return [];
       return ordered
         .map((item) => ({ item, site: rank(item, page) }))
@@ -119,6 +148,7 @@ export function createSearchIndex(): SearchIndex {
     },
 
     clear() {
+      equivalents = [];
       clearMatchCache();
       mini = createMiniSearch();
       byId = new Map();

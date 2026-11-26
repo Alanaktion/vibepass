@@ -239,7 +239,10 @@ export function SetupScreen({ onStatus }: Props) {
   return (
     <main class="screen">
       <h1>Vibepass</h1>
-      <p class="muted">Connect to your self-hosted Bitwarden or Vaultwarden server.</p>
+      <p class="muted">
+        Enter your Bitwarden or Vaultwarden server address. Your browser will ask for access to that
+        server so Vibepass can sign in and sync your vault.
+      </p>
       <form class="stack" onSubmit={(e) => void submit(e)}>
         <label>
           Server URL

@@ -6,6 +6,22 @@ exit criteria for each phase, based on what is already in the repo.
 
 Last updated: 2026-11-26 (basic passkeys pulled forward from Later).
 
+## Pre-signing progress
+
+- Search and autofill honor enabled equivalent-domain groups from sync, including offline.
+  Passkeys retain their relying-party checks.
+- The inline menu filters login names and usernames in its search box or as the user types a username. A polite
+  live region announces results and keyboard selection. Manual screen-reader validation is pending.
+- The detector has its first bundled site rule and a CI corpus of three sanitized GitHub and
+  PyPI forms. The top-50 target still needs more real pages.
+- Setup explains server access before the browser prompt and shows a dismissible shortcut and
+  fill tour after login.
+- CI has a pinned Vaultwarden compatibility job, a weekly latest-version run, and a workflow
+  for reproducible unsigned packages. Privacy, threat model, permission justifications, server
+  coverage, feedback, and disclosure materials are linked from the README.
+- Release gates still include self-hosted Bitwarden and Firefox live parity, daily-use trials,
+  a third-party review, signed distribution, and beta feedback.
+
 ## Where we are
 
 The scaffold (commit `c08dcb8`) gives us:

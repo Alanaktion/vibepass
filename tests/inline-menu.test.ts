@@ -5,6 +5,7 @@ import {
   restoreBrowserAutocomplete,
   suppressBrowserAutocomplete,
 } from '../src/content/detect';
+import { InlineMenu } from '../src/content/menu';
 import type { InlineMenuState } from '../src/shared/messages';
 
 const ITEM = { id: 'item-1', name: 'Example', username: 'alice', reprompt: false, recent: false };
@@ -112,6 +113,42 @@ describe('inline menu', () => {
     password.blur();
     expect(menuHost()).toBeNull();
     expect(password.hasAttribute('autocomplete')).toBe(false);
+  });
+
+  it('searches inside the closed menu and announces the current choice', () => {
+    const attach = vi.spyOn(HTMLElement.prototype, 'attachShadow');
+    const onPick = vi.fn();
+    const menu = new InlineMenu({ onPick });
+    page('<input id="password" type="password">');
+    const anchor = document.querySelector('input')!;
+    try {
+      menu.open(anchor, [
+        { kind: 'item', item: ITEM },
+        { kind: 'item', item: { ...ITEM, id: 'work', name: 'Work account', username: 'bob' } },
+      ]);
+      const root = attach.mock.results.at(-1)!.value as ShadowRoot;
+      const filter = root.querySelector('input')!;
+      const status = root.querySelector('[role=status]')!;
+      expect(status.textContent).toContain('2 saved logins');
+      expect(menu.focusSearch()).toBe(true);
+      filter.value = 'BOB';
+      filter.dispatchEvent(new Event('input'));
+      expect(status.textContent).toContain('1 saved login');
+      menu.move(1);
+      expect(status.textContent).toContain('Work account, bob, 1 of 1');
+      expect(menu.pickActive()).toBe(true);
+      expect(onPick).toHaveBeenCalledWith(
+        expect.objectContaining({ item: expect.objectContaining({ id: 'work' }) }),
+      );
+      filter.value = 'absent';
+      filter.dispatchEvent(new Event('input'));
+      expect(menu.pickActive()).toBe(false);
+      expect(status.textContent).toContain('No matching logins');
+      expect(anchor.value).toBe('');
+    } finally {
+      menu.close();
+      attach.mockRestore();
+    }
   });
 
   it('ignores key presses the page scripted', async () => {

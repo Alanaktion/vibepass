@@ -216,6 +216,10 @@ export interface SyncResponse {
     } | null;
     organizations?: OrganizationResponse[];
   };
+  domains?: {
+    equivalentDomains?: string[][] | null;
+    globalEquivalentDomains?: { domains: string[]; excluded?: boolean }[] | null;
+  } | null;
   folders: FolderResponse[];
   collections?: CollectionResponse[] | null;
   ciphers: CipherResponse[];

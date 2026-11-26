@@ -180,6 +180,7 @@ await writeFile(join(ext, 'manifest.json'), JSON.stringify(manifest));
 
 const context = await chromium.launchPersistentContext(await mkdtemp(join(tmpdir(), 'vp-')), {
   channel: 'chromium',
+  ignoreDefaultArgs: ['--disable-extensions'],
   headless: true,
   args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`],
   permissions: ['clipboard-read', 'clipboard-write'],

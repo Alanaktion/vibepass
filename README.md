@@ -18,6 +18,10 @@ autofill, and a calm item view. Nothing to migrate.
   Down move, Enter fills the selected login into the page, Shift+Enter or Right opens it.
   Ctrl+C copies the username, Ctrl+Shift+C the password, Ctrl+Alt+C the one-time password
   (⌘ on macOS).
+- **Inline suggestions:** type in a username field to narrow the menu by login name or username.
+  From a password field, press Alt+Down or click “Search these logins” to filter inside the menu.
+  Arrow keys move through the results. Enter fills the highlighted login and Escape closes the menu.
+  Base-domain matching honors the enabled equivalent-domain groups from your server.
 - **In an item:** click a masked value or focus it and press Enter or Space to copy it.
   Use the eye icon to reveal or hide it and the copy icon to copy a field.
 - **Fill without the popup:** Ctrl+Shift+L (⌘⇧L) fills the best match for the page. If the
@@ -216,6 +220,12 @@ basic inline menu and multi-step logins pulled forward from Phase 3. **Phase 2 (
 is built and in its trial: save, update, edit, generate, and organize, behind a setting. Basic
 passkey support (sign in, and save with editing on) is pulled forward from "Later". Contributors and coding agents: start
 with [AGENTS.md](AGENTS.md).
+
+## Privacy, compatibility, and feedback
+
+See the [privacy policy](docs/PRIVACY.md), [verified server coverage and review materials](docs/REVIEW.md),
+and [private security reporting instructions](SECURITY.md). Use the repository’s compatibility
+issue template for form or server problems.
 
 ## License
 

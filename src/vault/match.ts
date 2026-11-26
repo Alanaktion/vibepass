@@ -25,6 +25,7 @@ export interface ParsedPage {
   /** Registrable domain (eTLD+1), or the hostname for IPs, localhost, and intranet names. */
   domain: string;
   port: string;
+  equivalents?: ReadonlySet<string> | undefined;
 }
 
 /** Parse a page or saved URI. Saved URIs often lack a scheme ("example.com"), as in Bitwarden. */
@@ -93,7 +94,9 @@ export function matchUri(saved: LoginUri, page: ParsedPage): MatchQuality {
     }
     case UriMatch.Domain: {
       const parsed = parseSaved(saved.uri);
-      if (parsed?.domain !== page.domain) return MatchQuality.None;
+      if (!parsed || (parsed.domain !== page.domain && !page.equivalents?.has(parsed.domain))) {
+        return MatchQuality.None;
+      }
       // A saved port (vault.example.com:8443) must match; otherwise any port on the domain does.
       if (hasExplicitPort(saved.uri) && parsed.port !== page.port) return MatchQuality.None;
       return parsed.url.hostname === page.url.hostname ? MatchQuality.Host : MatchQuality.Domain;

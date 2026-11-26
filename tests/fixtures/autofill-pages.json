@@ -1,0 +1,23 @@
+[
+  {
+    "url": "https://github.com/login",
+    "html": "<form><input type='text' name='login' id='login_field' autocomplete='username'><input type='password' name='password' id='password' autocomplete='current-password'><input type='submit'></form>",
+    "username": "login_field",
+    "password": "password",
+    "newPassword": null
+  },
+  {
+    "url": "https://pypi.org/account/login/",
+    "html": "<form><input type='text' name='q' id='search' autocomplete='off'></form><form><input type='text' name='q' id='mobile-search' autocomplete='off'></form><form><input type='text' name='username' id='username' autocomplete='username'><input type='checkbox' id='show-password'><input type='password' name='password' id='password' autocomplete='current-password'></form>",
+    "username": "username",
+    "password": "password",
+    "newPassword": null
+  },
+  {
+    "url": "https://github.com/signup",
+    "html": "<form><input type='email' name='user[email]' id='email' autocomplete='off'><input type='password' name='user[password]' id='password' autocomplete='off'><input type='text' name='user[login]' id='login' autocomplete='none'><input type='search' name='filter' id='country-dropdown-panel-filter'></form>",
+    "username": "email",
+    "password": null,
+    "newPassword": "password"
+  }
+]

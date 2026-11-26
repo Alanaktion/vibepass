@@ -217,7 +217,7 @@ export class ApiClient {
   }
 
   async sync(): Promise<SyncResponse> {
-    return await this.json<SyncResponse>(`${this.apiUrl}/sync?excludeDomains=true`, {
+    return await this.json<SyncResponse>(`${this.apiUrl}/sync?excludeDomains=false`, {
       headers: this.authHeaders(),
     });
   }

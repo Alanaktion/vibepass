@@ -1,9 +1,10 @@
 /**
  * Login form detection: a username (or email) field and a password field, plus one-time code
  * fields. Covers single-page logins, multi-step logins (a username step, then a password step),
- * and split logins (username and password in separate forms). Heuristics only, no site-specific
- * rules yet (those come with per-site overrides in Phase 3).
+ * and split logins (username and password in separate forms).
  */
+
+import siteRules from './site-rules.json';
 
 export interface LoginFields {
   username: HTMLInputElement | null;
@@ -89,7 +90,14 @@ function autocomplete(input: HTMLInputElement): string {
   const original = originalAutocomplete.has(input)
     ? originalAutocomplete.get(input)
     : input.getAttribute('autocomplete');
-  return (original ?? '').toLowerCase();
+  const hint = (original ?? '').toLowerCase();
+  if (hint && hint !== 'off' && hint !== 'none') return hint;
+  const { origin, pathname } = input.ownerDocument.location;
+  return (
+    siteRules.find(
+      (rule) => rule.origin === origin && rule.path === pathname && input.matches(rule.selector),
+    )?.autocomplete ?? hint
+  );
 }
 
 /** A field's autocomplete value as the page set it, lowercased. */

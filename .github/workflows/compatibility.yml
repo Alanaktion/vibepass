@@ -1,0 +1,53 @@
+name: Vaultwarden compatibility
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: '27 5 * * 1'
+permissions:
+  contents: read
+jobs:
+  chromium:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        version: ${{ github.event_name == 'schedule' && fromJSON('["1.37.5","latest"]') || fromJSON('["1.37.5"]') }}
+    services:
+      vaultwarden:
+        image: vaultwarden/server:${{ matrix.version }}
+        env:
+          DOMAIN: http://127.0.0.1:8000
+          SIGNUPS_ALLOWED: 'true'
+          I_REALLY_WANT_VOLATILE_STORAGE: 'true'
+          LOGIN_RATELIMIT_MAX_BURST: '1000'
+        ports: ['8000:80']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run build:chrome
+      - name: Install the browser test driver
+        run: |
+          npm install --prefix "$RUNNER_TEMP/driver" playwright@1.62.1
+          "$RUNNER_TEMP/driver/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Exercise the disposable vault
+        run: |
+          export NODE_PATH="$RUNNER_TEMP/driver/node_modules"
+          export VIBEPASS_TEST_PASSWORD="$(openssl rand -hex 32)"
+          export VIBEPASS_TEST_TOTP_FILE="$RUNNER_TEMP/test-totp"
+          server=http://127.0.0.1:8000
+          site=http://127.0.0.1:8090/login
+          curl --retry 20 --retry-connrefused --fail "$server/alive"
+          node scripts/dev/register-account.mjs "$server" test@example.test
+          node scripts/dev/seed-vault.mjs "$server" test@example.test "$site"
+          node scripts/dev/register-account.mjs "$server" otp@example.test argon2id
+          node scripts/dev/seed-vault.mjs "$server" otp@example.test "$site" --two-factor
+          node scripts/dev/live-check.mjs "$server" test@example.test otp@example.test
+          node scripts/dev/inline-menu-check.mjs "$server" test@example.test
+          node scripts/dev/write-check.mjs "$server" test@example.test
+          node scripts/dev/passkey-check.mjs "$server" test@example.test

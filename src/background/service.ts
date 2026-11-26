@@ -27,6 +27,7 @@ import { CodedError } from '../shared/errors';
 import { log } from '../shared/log';
 import type { LoginRequest, VaultStatus } from '../shared/messages';
 import type { SearchIndex } from '../search';
+import type { CachedVault } from '../storage/vault-cache';
 import type { Account } from '../storage/account';
 import { activeOptions, HISTORY_LIMIT, type StoredGeneratorOptions } from '../storage/generator';
 import type { UnlockedSession } from '../storage/session';
@@ -68,8 +69,8 @@ export interface ServiceDeps {
     clear(): Promise<void>;
   };
   cache: {
-    read(userId: string): Promise<SyncResponse | null>;
-    write(userId: string, sync: SyncResponse): Promise<void>;
+    read(userId: string): Promise<CachedVault | null>;
+    write(userId: string, sync: CachedVault): Promise<void>;
     clear(userId: string): Promise<void>;
   };
   /** "Remember me" tokens for two-step login. */
@@ -386,8 +387,22 @@ export class VaultService {
       await this.deps.account.save(updated);
       this.vault.setAccount(updated);
     }
-    await this.deps.cache.write(account.userId, sync);
-    await this.showVault(sync);
+    const key = this.vault.key;
+    if (!key || this.vault.currentAccount?.userId !== account.userId) return;
+    const { domains, ...rest } = sync;
+    const cached: CachedVault = { ...rest };
+    delete cached.encryptedDomains;
+    if (domains) {
+      const groups = [
+        ...(domains.equivalentDomains ?? []),
+        ...(domains.globalEquivalentDomains ?? [])
+          .filter((g) => g.excluded === false)
+          .map((g) => g.domains),
+      ];
+      cached.encryptedDomains = await encryptString(JSON.stringify(groups), key);
+    }
+    await this.deps.cache.write(account.userId, cached);
+    await this.showVault(cached);
     this.vault.markSynced(new Date(this.deps.now()));
     if (this.session && this.vault.isUnlocked) {
       this.session = { ...this.session, revision };
@@ -395,9 +410,12 @@ export class VaultService {
     }
   }
 
-  private async showVault(sync: SyncResponse): Promise<void> {
+  private async showVault(sync: CachedVault): Promise<void> {
     const key = this.vault.key;
     if (!key) return;
+    const groups: unknown = sync.encryptedDomains
+      ? JSON.parse(await decryptString(sync.encryptedDomains, key))
+      : [];
     const decrypted = await decryptVault(sync, key);
     // The vault may have been locked while we were decrypting.
     if (this.vault.key !== key) {
@@ -405,7 +423,7 @@ export class VaultService {
       return;
     }
     this.vault.unlock(key, decrypted);
-    this.search.replaceAll(decrypted.items, decrypted.notes);
+    this.search.replaceAll(decrypted.items, decrypted.notes, groups);
     if (decrypted.skipped > 0) log.debug('items skipped', { count: decrypted.skipped });
   }
 
@@ -558,7 +576,7 @@ export class VaultService {
   /** Apply a change to the cached sync response, then show the result. */
   private async applyChange(
     account: Account,
-    change: (sync: SyncResponse) => SyncResponse,
+    change: (sync: CachedVault) => CachedVault,
   ): Promise<void> {
     const cached = await this.deps.cache.read(account.userId);
     if (!cached) {

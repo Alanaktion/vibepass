@@ -1,0 +1,35 @@
+name: Unsigned review packages
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.18.0
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - name: Verify tagged version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: test "$GITHUB_REF_NAME" = "v$(node -p 'require("./package.json").version')"
+      - name: Build twice and compare archives
+        run: |
+          npm run build
+          python3 scripts/package.py
+          sha256sum dist/*.zip > SHA256SUMS
+          npm run build
+          python3 scripts/package.py
+          sha256sum --check SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vibepass-unsigned
+          path: |
+            dist/*.zip
+            SHA256SUMS

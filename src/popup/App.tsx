@@ -15,7 +15,7 @@ import { SettingsView } from './components/SettingsView';
 import { SetupScreen } from './components/SetupScreen';
 import { TrashView } from './components/TrashView';
 import { CipherType } from '../vault/types';
-import { activeTab, type ActiveTab } from './lib';
+import { activeTab, modLabel, type ActiveTab } from './lib';
 
 type View =
   | { kind: 'list' }
@@ -33,6 +33,7 @@ export function App() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [tab, setTab] = useState<ActiveTab | null>(null);
   const [view, setView] = useState<View>({ kind: 'list' });
+  const [showTour, setShowTour] = useState(false);
   const [query, setQuery] = useState('');
   const [dialog, setDialog] = useState<DialogRequest | null>(null);
   const [toast, setToast] = useState<{ message: string; at: number } | null>(null);
@@ -126,7 +127,14 @@ export function App() {
   let screen;
   switch (status.state) {
     case 'logged-out':
-      screen = <SetupScreen onStatus={setStatus} />;
+      screen = (
+        <SetupScreen
+          onStatus={(next) => {
+            setShowTour(next.state === 'unlocked');
+            setStatus(next);
+          }}
+        />
+      );
       break;
     case 'locked':
       screen = <LockScreen status={status} onStatus={setStatus} />;
@@ -189,6 +197,24 @@ export function App() {
 
   return (
     <Ctx.Provider value={ctx}>
+      {showTour && status.state === 'unlocked' && view.kind === 'list' && (
+        <aside class="banner" aria-label="Getting started">
+          <strong>Your vault is ready</strong>
+          <p>
+            Open quick find with {modLabel()}Shift+Space or the toolbar icon. On a login field, use
+            the arrow keys to choose a saved login and Enter to fill it.
+          </p>
+          <button
+            type="button"
+            class="link"
+            onClick={() => {
+              setShowTour(false);
+            }}
+          >
+            Got it
+          </button>
+        </aside>
+      )}
       {screen}
       {dialog && (
         <Dialog

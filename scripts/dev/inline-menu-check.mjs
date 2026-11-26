@@ -38,7 +38,7 @@ const SEEN = `<script>
 </script>`;
 const PAGES = {
   '/login': `<!doctype html><title>Login</title>
-    <form><label>Email <input id="u" type="email" autocomplete="username"></label>
+    <form onsubmit="return false"><label>Email <input id="u" type="email" autocomplete="username"></label>
     <label>Password <input id="p" type="password" autocomplete="current-password"></label>
     <button>Sign in</button></form>${SEEN}`,
   // Username first, then the page swaps in a password step (like Google or Microsoft).
@@ -76,6 +76,7 @@ await writeFile(join(ext, 'manifest.json'), JSON.stringify(manifest));
 
 const context = await chromium.launchPersistentContext(await mkdtemp(join(tmpdir(), 'vp-')), {
   channel: 'chromium',
+  ignoreDefaultArgs: ['--disable-extensions'],
   headless: true,
   args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`],
   viewport: { width: 900, height: 640 },
@@ -127,6 +128,12 @@ try {
     'browser form history is off while the menu is open',
     (await site.getAttribute('#u', 'autocomplete')) === 'off',
   );
+  await site.locator('#u').pressSequentially('z-no-such-account');
+  check('typing filters the saved logins', (await site.locator('vibepass-menu').count()) === 1);
+  await site.keyboard.press('ArrowDown');
+  await site.keyboard.press('Enter');
+  check('a filtered-out login cannot be picked', !(await seen(site)).p);
+  await site.locator('#u').fill('alice');
   await site.keyboard.press('ArrowDown');
   await site.keyboard.press('Enter');
   await site.waitForFunction(() => /** @type {any} */ (window).seen.p);

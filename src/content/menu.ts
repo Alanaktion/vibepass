@@ -73,6 +73,9 @@ function rowLabel(row: MenuRow): { name: string; sub: string | null } {
 export class InlineMenu {
   private host: HTMLElement | null = null;
   private list: HTMLElement | null = null;
+  private search: HTMLInputElement | null = null;
+  private allRows: MenuRow[] = [];
+  private announcement: HTMLElement | null = null;
   private rows: MenuRow[] = [];
   private active = -1;
   private frame = 0;
@@ -91,10 +94,13 @@ export class InlineMenu {
     }
     if (this.anchor !== anchor) this.close();
     this.anchor = anchor;
-    this.rows = rows;
-    this.active = -1;
+    this.allRows = rows;
     if (!this.host) this.mount();
-    this.render();
+    if (this.search) {
+      this.search.hidden = !rows.some((row) => row.kind === 'item');
+      if (this.search.hidden) this.search.value = '';
+    }
+    this.filter();
     this.reposition();
   }
 
@@ -107,9 +113,37 @@ export class InlineMenu {
     }
     this.host = null;
     this.list = null;
+    this.announcement = null;
+    this.search = null;
+    this.allRows = [];
     this.rows = [];
     this.active = -1;
     this.anchor = null;
+  }
+
+  focusSearch(): boolean {
+    if (!this.search || this.search.hidden) return false;
+    this.search.focus();
+    return true;
+  }
+
+  containsFocusTarget(target: EventTarget | null): boolean {
+    return target !== null && target === this.host;
+  }
+
+  private filter(): void {
+    const query = this.search?.value.trim().toLowerCase();
+    this.rows = query
+      ? this.allRows.filter(
+          (row) =>
+            row.kind === 'item' &&
+            (row.item.name.toLowerCase().includes(query) ||
+              row.item.username?.toLowerCase().includes(query)),
+        )
+      : this.allRows;
+    if (!this.rows.length) this.rows = [{ kind: 'message', text: 'No matching logins' }];
+    this.active = -1;
+    this.render();
   }
 
   /** Arrow keys: move the highlight, wrapping around. */
@@ -171,7 +205,38 @@ export class InlineMenu {
       const row = this.pickable()[index];
       if (row) this.callbacks.onPick(row);
     });
-    root.append(style, list);
+    const status = document.createElement('div');
+    status.setAttribute('role', 'status');
+    status.setAttribute('aria-live', 'polite');
+    status.setAttribute('aria-atomic', 'true');
+    status.style.cssText =
+      'position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)';
+    this.announcement = status;
+    const search = document.createElement('input');
+    search.type = 'search';
+    search.placeholder = 'Search these logins';
+    search.setAttribute('aria-label', search.placeholder);
+    search.autocomplete = 'off';
+    search.style.cssText = 'box-sizing:border-box;width:100%;font:13px system-ui;padding:5px 10px';
+    search.addEventListener('input', () => {
+      this.filter();
+    });
+    search.addEventListener('keydown', (event) => {
+      if (!event.isTrusted) return;
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        this.move(event.key === 'ArrowDown' ? 1 : -1);
+      } else if (event.key === 'Escape') {
+        this.anchor?.focus();
+        this.close();
+      } else if (event.key !== 'Enter' || !this.pickActive()) return;
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    search.addEventListener('blur', (event) => {
+      if (event.relatedTarget !== this.anchor) this.close();
+    });
+    this.search = search;
+    root.append(style, list, search, status);
     document.documentElement.append(host);
     // Older browsers lack the popover API even though the DOM types always declare it.
     const popover = host as Partial<Pick<HTMLElement, 'showPopover'>>;
@@ -189,6 +254,20 @@ export class InlineMenu {
   private render(): void {
     const list = this.list;
     if (!list) return;
+    const choices = this.pickable();
+    const active = choices[this.active];
+    const only = this.rows.length === 1 ? this.rows[0] : null;
+    const count = choices.length;
+    const description = active ? Object.values(rowLabel(active)).filter(Boolean).join(', ') : null;
+    const summary =
+      only && only.kind !== 'item'
+        ? rowLabel(only).name
+        : `${String(count)} saved ${count === 1 ? 'login' : 'logins'}`;
+    const spoken = description
+      ? `${description}, ${String(this.active + 1)} of ${String(count)}`
+      : `Vibepass. ${summary}.${count ? ' Use arrow keys to choose.' : ''}`;
+    if (this.announcement && this.announcement.textContent !== spoken)
+      this.announcement.textContent = spoken;
     list.replaceChildren();
     const brand = document.createElement('div');
     brand.className = 'brand';

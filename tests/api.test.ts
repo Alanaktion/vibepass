@@ -104,7 +104,7 @@ describe('ApiClient', () => {
 
   it('sends the bearer token with sync and surfaces server messages', async () => {
     const { api, requests } = client((url) =>
-      url.endsWith('/api/sync?excludeDomains=true')
+      url.endsWith('/api/sync?excludeDomains=false')
         ? json(500, { message: 'Database is on fire' })
         : json(404, {}),
     );

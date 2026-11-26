@@ -51,7 +51,39 @@ describe('VaultService', () => {
     expect(account.refreshToken).toMatch(/^2\./);
     expect(JSON.stringify(account)).not.toContain('refresh-1');
     expect(JSON.stringify(account)).not.toContain(fixture.password);
-    expect(deps.stored.cache.get(account.userId)).toEqual(fixture.sync);
+    expect(deps.stored.cache.get(account.userId)).toEqual({ ...fixture.sync, domains: undefined });
+  });
+
+  it('uses enabled domain groups offline and keeps them encrypted at rest', async () => {
+    const { service, server, search, deps } = setup();
+    server.sync = {
+      ...server.sync,
+      domains: {
+        equivalentDomains: [
+          ['example.com', 'other.test'],
+          ['other.test', 'indirect.test'],
+        ],
+        globalEquivalentDomains: [
+          { domains: ['example.com', 'enabled.test'], excluded: false },
+          { domains: ['example.com', 'excluded.test'], excluded: true },
+        ],
+      },
+    };
+    await service.login(LOGIN);
+    expect(JSON.stringify([...deps.stored.cache.values()])).not.toContain('other.test');
+    await service.lock();
+    expect(search.pageFor('https://example.com')?.equivalents).toBeUndefined();
+    server.offline = true;
+    await service.unlock(fixture.password);
+    for (const domain of ['enabled.test', 'other.test']) {
+      const url = 'https://' + domain;
+      expect(search.search('', { url })[0]?.siteMatch).toBe(true);
+      expect(search.matchesFor(url, true)[0]?.id).toBe(loginId);
+      expect(search.matchesFor(url)).toEqual([]);
+    }
+    for (const host of ['excluded.test', 'indirect.test', 'other.test.example.org']) {
+      expect(search.matchesFor('https://' + host, true)).toEqual([]);
+    }
   });
 
   it('reports a wrong password from the server', async () => {

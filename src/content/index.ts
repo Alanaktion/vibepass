@@ -83,6 +83,8 @@ let cachedState: InlineMenuState | null = null;
 /** Fields whose browser form history we turned off; restored when they lose focus. */
 const suppressed = new Set<HTMLInputElement>();
 
+let filterField: HTMLInputElement | null = null;
+
 const menu = new InlineMenu({ onPick: (row) => void pick(row) });
 
 type FieldKind = 'username' | 'password' | 'totp' | 'new-password';
@@ -113,7 +115,17 @@ export function menuRows(state: InlineMenuState | null, input: HTMLInputElement)
       fieldAutocomplete(input).includes('username');
     return clear ? [{ kind: 'unlock' }] : [];
   }
-  return state.items.map((item) => ({ kind: 'item', item }));
+  const query =
+    input === filterField && kind === 'username' ? input.value.trim().toLowerCase() : '';
+  const items = query
+    ? state.items.filter(
+        (item) =>
+          item.name.toLowerCase().includes(query) || item.username?.toLowerCase().includes(query),
+      )
+    : state.items;
+  if (query && state.items.length && !items.length)
+    return [{ kind: 'message', text: 'No matching logins' }];
+  return items.map((item) => ({ kind: 'item', item }));
 }
 
 async function refreshState(): Promise<InlineMenuState | null> {
@@ -141,7 +153,11 @@ function show(input: HTMLInputElement, state: InlineMenuState | null): void {
 function openFor(input: HTMLInputElement): void {
   show(input, cachedState);
   void refreshState().then((state) => {
-    if (deepActiveElement() === input) show(input, state);
+    if (
+      deepActiveElement() === input ||
+      (menu.anchor === input && menu.containsFocusTarget(document.activeElement))
+    )
+      show(input, state);
   });
 }
 
@@ -213,7 +229,8 @@ function onFocusIn(event: FocusEvent): void {
 function onFocusOut(event: FocusEvent): void {
   const input = inputFromEvent(event);
   if (!input) return;
-  if (input === menu.anchor) menu.close();
+  if (input === filterField) filterField = null;
+  if (input === menu.anchor && !menu.containsFocusTarget(event.relatedTarget)) menu.close();
   if (suppressed.delete(input)) restoreBrowserAutocomplete(input);
 }
 
@@ -246,7 +263,7 @@ function onKeyDown(event: KeyboardEvent): void {
   switch (event.key) {
     case 'ArrowDown':
       stop();
-      menu.move(1);
+      if (!event.altKey || !menu.focusSearch()) menu.move(1);
       break;
     case 'ArrowUp':
       stop();
@@ -269,6 +286,17 @@ function onKeyDown(event: KeyboardEvent): void {
 }
 
 export function startInlineMenu(): void {
+  document.addEventListener(
+    'input',
+    (event) => {
+      if (!event.isTrusted || filling) return;
+      const input = inputFromEvent(event);
+      if (!input || input !== menu.anchor || loginFieldKind(input) !== 'username') return;
+      filterField = input;
+      show(input, cachedState);
+    },
+    true,
+  );
   document.addEventListener('focusin', onFocusIn, true);
   document.addEventListener('focusout', onFocusOut, true);
   document.addEventListener('click', onClick, true);
