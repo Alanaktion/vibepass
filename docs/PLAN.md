@@ -4,7 +4,7 @@ How we get from the current scaffold to a public v1, phase by phase. This follow
 the project spec (Spike, MVP, Write support, Beta, v1, Later) and adds the concrete milestones and
 exit criteria for each phase, based on what is already in the repo.
 
-Last updated: 2026-11-25 (Phase 2 built behind a setting; Phase 3 sign-up and password-change forms added).
+Last updated: 2026-11-26 (basic passkeys pulled forward from Later).
 
 ## Where we are
 
@@ -300,7 +300,24 @@ until this gate is green in CI.
 
 Prioritized from beta feedback. Candidates from the spec:
 
-- Passkeys (FIDO2 credentials), feature-detected by server version.
+- Passkeys (FIDO2 credentials), feature-detected by server version. **Basic support pulled
+  forward (2026-11-26):**
+  - **Sign in** with passkeys in the vault, in Bitwarden's storage format, so passkeys from the
+    official clients work and Vibepass's work there. A page-world script stands in for
+    `navigator.credentials.get/create` (top frame, secure pages) and hands anything Vibepass
+    can't answer to the browser. Vibepass's own prompt (closed shadow root, trusted input only)
+    lists the site's passkeys, with "Use another device or security key" and Cancel. The worker
+    checks the origin and RP id from the message sender, never the page, and signs (ES256 on Web
+    Crypto; the SDK doesn't expose its authenticator). Locked: the prompt offers to unlock.
+  - **Save** new passkeys (with editing on) as a new login or onto a login for the site without
+    one; `excludeCredentials` matches are refused. "None" attestation, zero AAGUID, UV and
+    backup flags set, counter 0 like the official clients (imported counters keep counting).
+  - Checked by `tests/passkey.test.ts`, round trips with Bitwarden's `CiphersClient` in
+    `tests/encrypt.test.ts`, and `scripts/dev/passkey-check.mjs` (11 of 11 in Chromium against
+    Vaultwarden 1.37.5, with a test site that verifies like a real relying party).
+  - **Not yet:** Firefox live testing, conditional (autofill) requests and passkeys in the
+    inline menu, cross-origin iframes, re-prompt items, removing a passkey in the editor,
+    related origins, and a check against real sites and self-hosted Bitwarden.
 - Cards and identities, with autofill for payment and address forms.
 - Biometric or passkey unlock.
 - Attachment upload.

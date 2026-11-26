@@ -100,6 +100,8 @@ export interface CipherResponse {
     password: string | null;
     totp: string | null;
     uris: { uri: string | null; match: UriMatch | null }[] | null;
+    /** Passkeys saved on this login. */
+    fido2Credentials?: Fido2CredentialResponse[] | null;
   } | null;
   card?: {
     cardholderName?: string | null;
@@ -121,6 +123,24 @@ export interface CipherResponse {
   attachments?: AttachmentResponse[] | null;
   /** Old passwords (EncStrings), newest first. */
   passwordHistory?: { password: string; lastUsedDate: string }[] | null;
+}
+
+/** A passkey on a login. Every field but creationDate is an EncString (counter and
+ * discoverable too, as "0" and "true"). */
+export interface Fido2CredentialResponse {
+  credentialId: string;
+  keyType: string;
+  keyAlgorithm: string;
+  keyCurve: string;
+  keyValue: string;
+  rpId: string;
+  userHandle: string | null;
+  userName: string | null;
+  counter: string;
+  rpName: string | null;
+  userDisplayName: string | null;
+  discoverable: string;
+  creationDate: string;
 }
 
 export type IdentityField =

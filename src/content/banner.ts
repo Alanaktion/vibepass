@@ -11,7 +11,7 @@ export interface BannerCallbacks {
   onAnswer(answer: SaveAnswer): Promise<string>;
 }
 
-const STYLE = `
+export const CARD_STYLE = `
 :host { all: initial; }
 .card {
   box-sizing: border-box;
@@ -112,7 +112,7 @@ export class SaveBanner {
     host.setAttribute('popover', 'manual');
     const root = host.attachShadow({ mode: 'closed' });
     const style = document.createElement('style');
-    style.textContent = STYLE;
+    style.textContent = CARD_STYLE;
     const card = document.createElement('div');
     card.className = 'card';
     card.setAttribute('role', 'dialog');

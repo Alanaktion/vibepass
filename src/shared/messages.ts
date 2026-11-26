@@ -19,6 +19,12 @@ import type {
   TrashItem,
 } from '../vault/types';
 import type { ErrorCode } from './errors';
+import type {
+  AssertionJson,
+  AttestationJson,
+  PasskeyCreateRequest,
+  PasskeyGetRequest,
+} from './webauthn';
 
 export type LockState = 'logged-out' | 'locked' | 'unlocked';
 
@@ -119,6 +125,35 @@ export type SaveAnswer =
   /** Don't offer again for this site (until the browser restarts). */
   | { action: 'never' };
 
+/** A passkey the user can sign in with. Names and usernames only; the key stays in the worker. */
+export interface PasskeyChoice {
+  cipherId: string;
+  /** As stored in the vault. */
+  credentialId: string;
+  name: string;
+  userName: string | null;
+}
+
+/** What to show when a site asks to sign in with a passkey. */
+export type PasskeyGetOptions =
+  /** Passkeys are off, or the page can't use them: let the browser handle it. */
+  | { state: 'off' }
+  | { state: 'locked' }
+  | { state: 'ready'; rpId: string; passkeys: PasskeyChoice[] };
+
+/** What to show when a site asks to make a new passkey. */
+export type PasskeyCreateOptions =
+  | { state: 'off' }
+  | { state: 'locked' }
+  /** The vault already has a passkey this site knows for the account. */
+  | { state: 'excluded'; rpId: string; name: string }
+  | {
+      state: 'ready';
+      rpId: string;
+      /** Logins for the site without a passkey, which the new one can join; best first. */
+      logins: { id: string; name: string; username: string | null }[];
+    };
+
 /** Map of message type -> { request payload, response payload }. */
 export interface MessageMap {
   'vault:status': { request: undefined; response: VaultStatus };
@@ -177,6 +212,29 @@ export interface MessageMap {
   'autofill:save-answer': { request: SaveAnswer; response: { message: string } };
   /** Suggest a strong password for a new-password field, following the site's rules. */
   'autofill:generate': { request: { rules: string | null }; response: { password: string } };
+  'passkey:get-options': {
+    request: { rpId: string | null; allowCredentials: string[] };
+    response: PasskeyGetOptions;
+  };
+  /** Sign in with the passkey the user picked (a trusted click in Vibepass's prompt). */
+  'passkey:get': {
+    request: { request: PasskeyGetRequest; cipherId: string; credentialId: string };
+    response: AssertionJson;
+  };
+  'passkey:create-options': {
+    request: {
+      rpId: string | null;
+      algorithms: number[];
+      excludeCredentials: string[];
+      userName: string;
+    };
+    response: PasskeyCreateOptions;
+  };
+  /** Make and save a passkey the user agreed to; `cipherId` null saves it as a new login. */
+  'passkey:create': {
+    request: { request: PasskeyCreateRequest; cipherId: string | null };
+    response: AttestationJson;
+  };
   'clipboard:copied': { request: undefined; response: undefined };
   'settings:get': { request: undefined; response: Settings };
   'settings:set': { request: Partial<Settings>; response: Settings };
@@ -235,6 +293,10 @@ const MESSAGE_TYPES: readonly MessageType[] = [
   'autofill:pending-prompt',
   'autofill:save-answer',
   'autofill:generate',
+  'passkey:get-options',
+  'passkey:get',
+  'passkey:create-options',
+  'passkey:create',
   'clipboard:copied',
   'settings:get',
   'settings:set',
@@ -253,6 +315,10 @@ const CONTENT_SCRIPT_ALLOWED: ReadonlySet<MessageType> = new Set<MessageType>([
   'autofill:pending-prompt',
   'autofill:save-answer',
   'autofill:generate',
+  'passkey:get-options',
+  'passkey:get',
+  'passkey:create-options',
+  'passkey:create',
 ]);
 
 /** Messages only the popup (an extension page) may send; content scripts are refused. */

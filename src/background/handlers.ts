@@ -6,12 +6,14 @@ import type { VaultState } from '../vault/state';
 import type { Handlers } from './router';
 import type { VaultService } from './service';
 import type { createAutofill } from './autofill';
+import type { createPasskeys } from './passkeys';
 
 export interface BackgroundContext {
   vault: VaultState;
   search: SearchIndex;
   service: VaultService;
   autofill?: ReturnType<typeof createAutofill>;
+  passkeys?: ReturnType<typeof createPasskeys>;
   clipboard?: { scheduleClear(): Promise<void> };
   settings?: {
     load(): Promise<Settings>;
@@ -112,6 +114,23 @@ export function createHandlers(ctx: BackgroundContext): Handlers {
     'autofill:generate': async ({ rules }, sender) => {
       topFrameTab(sender);
       return { password: await service.generatePassword({ rules }) };
+    },
+
+    'passkey:get-options': (request, sender) => {
+      const { url } = topFrameTab(sender);
+      return need(ctx.passkeys, 'Passkeys').getOptions(url, request);
+    },
+    'passkey:get': ({ request, cipherId, credentialId }, sender) => {
+      const { url } = topFrameTab(sender);
+      return need(ctx.passkeys, 'Passkeys').get(url, request, cipherId, credentialId);
+    },
+    'passkey:create-options': (request, sender) => {
+      const { url } = topFrameTab(sender);
+      return need(ctx.passkeys, 'Passkeys').createOptions(url, request);
+    },
+    'passkey:create': ({ request, cipherId }, sender) => {
+      const { url } = topFrameTab(sender);
+      return need(ctx.passkeys, 'Passkeys').create(url, request, cipherId);
     },
 
     'vault:edit': ({ id, masterPassword }) => service.editable(id, masterPassword),

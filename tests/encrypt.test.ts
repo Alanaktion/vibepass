@@ -8,7 +8,12 @@
  * the same pinned package, initialized with the fixture account's keys.
  */
 import * as glue from '@bitwarden/sdk-internal/bitwarden_wasm_internal_bg.js';
-import type { Cipher, CipherView, PasswordManagerClient } from '@bitwarden/sdk-internal';
+import type {
+  Cipher,
+  CipherView,
+  Fido2CredentialFullView,
+  PasswordManagerClient,
+} from '@bitwarden/sdk-internal';
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { CipherResponse } from '../src/api/types';
 import {
@@ -27,6 +32,7 @@ import {
   toDraft,
   type CipherRequest,
 } from '../src/vault/encrypt';
+import { createPasskey, signAssertion, type NewPasskeyInput } from '../src/vault/passkey';
 import { CipherType, FieldType, UriMatch, type ItemDraft } from '../src/vault/types';
 import { officialVaults, type OfficialVaultFixture } from './fixtures';
 
@@ -111,6 +117,21 @@ const officialDecrypt = (client: PasswordManagerClient, cipher: CipherResponse) 
     .vault()
     .ciphers()
     .decrypt(cipher as unknown as Cipher);
+
+function passkeyInput(): NewPasskeyInput {
+  return {
+    rpId: 'passkeys.example.com',
+    rpName: 'Example',
+    userHandle: 'dXNlci1oYW5kbGU',
+    userName: 'alice@example.com',
+    userDisplayName: 'Alice',
+    discoverable: true,
+    challenge: 'Y2hhbGxlbmdl',
+    origin: 'https://passkeys.example.com',
+    credProps: false,
+    now: NOW,
+  };
+}
 
 function fullLoginDraft(): ItemDraft {
   return {
@@ -277,6 +298,76 @@ describe.each(Object.entries(officialVaults))('round trips (%s)', (_name, fixtur
     expect(after.name).toBe('Travel card');
     expect(after.card).toEqual(view.card);
     expect(after.login).toBeUndefined();
+  });
+
+  it('a passkey Vibepass saves reads back the same in the official client', async () => {
+    const { passkey } = await createPasskey(passkeyInput());
+    const base = structuredClone(fixture.sync.ciphers.find((c) => c.type === CipherType.Login)!);
+    const previous = await decryptCipher(base, userKey);
+    const request = await encryptDraft(toDraft(previous), base, previous, context(), {
+      add: passkey,
+    });
+    const stored = asStored(request, base.id);
+    const view = await officialDecrypt(official, stored);
+    expect(view.login?.fido2Credentials).toHaveLength(1);
+    const theirs = view.login!.fido2Credentials![0]!;
+    expect(theirs).toMatchObject({
+      credentialId: passkey.credentialId,
+      keyType: 'public-key',
+      keyAlgorithm: 'ECDSA',
+      keyCurve: 'P-256',
+      keyValue: passkey.keyValue,
+      rpId: 'passkeys.example.com',
+      userHandle: passkey.userHandle,
+      userName: 'alice@example.com',
+      counter: '0',
+      rpName: 'Example',
+      userDisplayName: 'Alice',
+      discoverable: 'true',
+    });
+    expect(Date.parse(theirs.creationDate)).toBe(NOW.getTime());
+    // Everything else on the login is untouched.
+    expect(view.login?.password).toBe(previous.login?.password);
+
+    // A counter update changes only the counter.
+    const withPasskey = await decryptCipher(stored, userKey);
+    expect(withPasskey.login?.passkeys).toEqual([passkey]);
+    const bumped = await encryptDraft(toDraft(withPasskey), stored, withPasskey, context(), {
+      counter: { credentialId: passkey.credentialId, value: 7 },
+    });
+    const after = await officialDecrypt(official, asStored(bumped, base.id));
+    expect(after.login?.fido2Credentials?.[0]).toMatchObject({ ...theirs, counter: '7' });
+
+    // An ordinary edit keeps the passkey.
+    const edited = toDraft(withPasskey);
+    edited.name = 'Renamed with a passkey';
+    const plain = await encryptDraft(edited, stored, withPasskey, context());
+    const kept = await officialDecrypt(official, asStored(plain, base.id));
+    expect(kept.login?.fido2Credentials?.[0]?.keyValue).toBe(passkey.keyValue);
+  });
+
+  it('signs with a passkey the official client saved', async () => {
+    const { passkey } = await createPasskey(passkeyInput());
+    const base = fixture.sync.ciphers.find((c) => c.type === CipherType.Login)!;
+    let view: CipherView = await officialDecrypt(official, base);
+    view = official
+      .vault()
+      .ciphers()
+      .set_fido2_credentials(view, [
+        { ...passkey, counter: '3', discoverable: 'true', creationDate: NOW.toISOString() },
+      ] as unknown as Fido2CredentialFullView[]);
+    const { cipher } = await official.vault().ciphers().encrypt(view);
+    const ours = await decryptCipher(cipher as unknown as CipherResponse, userKey);
+    expect(ours.login?.passkeys).toEqual([
+      { ...passkey, counter: 3, creationDate: expect.any(String) as string },
+    ]);
+    expect(Date.parse(ours.login!.passkeys[0]!.creationDate)).toBe(NOW.getTime());
+    const assertion = await signAssertion(ours.login!.passkeys[0]!, {
+      challenge: 'Y2hhbGxlbmdl',
+      origin: 'https://passkeys.example.com',
+      counter: 4,
+    });
+    expect(assertion.userHandle).toBe(passkey.userHandle);
   });
 
   it('refuses to re-encrypt an item in a format it does not understand', async () => {

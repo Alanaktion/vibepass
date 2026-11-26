@@ -21,6 +21,11 @@ export interface Settings {
   allowEdits: boolean;
   /** After signing in or changing a password on a site, offer to save or update the login. */
   offerToSave: boolean;
+  /**
+   * Offer passkeys saved in the vault when a site asks for one, and offer to save new passkeys
+   * (saving also needs allowEdits).
+   */
+  passkeys: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -32,6 +37,7 @@ export const DEFAULT_SETTINGS: Settings = {
   inlineMenu: true,
   allowEdits: false,
   offerToSave: true,
+  passkeys: true,
 };
 
 export const LOCK_AFTER_CHOICES = [1, 5, 15, 30, 60, 240, 0] as const;

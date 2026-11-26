@@ -7,6 +7,7 @@ import {
   type SymmetricKey,
 } from '../crypto';
 import { canEncrypt } from './encrypt';
+import type { StoredPasskey } from './passkey';
 import {
   CipherType,
   type AttachmentSummary,
@@ -177,6 +178,29 @@ async function decryptUris(cipher: CipherResponse, maybe: Decryptor): Promise<Lo
   return uris;
 }
 
+async function decryptPasskeys(cipher: CipherResponse, maybe: Decryptor): Promise<StoredPasskey[]> {
+  const out: StoredPasskey[] = [];
+  for (const entry of cipher.login?.fido2Credentials ?? []) {
+    const text = async (value: string | null | undefined) => (await maybe(value)) ?? '';
+    out.push({
+      credentialId: await text(entry.credentialId),
+      keyType: await text(entry.keyType),
+      keyAlgorithm: await text(entry.keyAlgorithm),
+      keyCurve: await text(entry.keyCurve),
+      keyValue: await text(entry.keyValue),
+      rpId: await text(entry.rpId),
+      userHandle: await maybe(entry.userHandle),
+      userName: await maybe(entry.userName),
+      counter: Number.parseInt(await text(entry.counter), 10) || 0,
+      rpName: await maybe(entry.rpName),
+      userDisplayName: await maybe(entry.userDisplayName),
+      discoverable: (await maybe(entry.discoverable)) === 'true',
+      creationDate: entry.creationDate,
+    });
+  }
+  return out;
+}
+
 async function decryptSummary(
   cipher: CipherResponse,
   ownerKey: SymmetricKey,
@@ -241,6 +265,8 @@ export interface DecryptedCipher {
     password: string | null;
     totp: string | null;
     uris: LoginUri[];
+    /** Passkeys, in the server's order, private keys included. */
+    passkeys: StoredPasskey[];
   } | null;
   card: {
     cardholderName: string | null;
@@ -334,6 +360,7 @@ export async function decryptCipher(
           password: await maybe(cipher.login.password),
           totp: await maybe(cipher.login.totp),
           uris: await decryptUris(cipher, maybe),
+          passkeys: await decryptPasskeys(cipher, maybe),
         }
       : null,
     card: cipher.card
@@ -395,6 +422,9 @@ export function toDetail(
         field('login.username', 'Username', login.username),
         field('login.password', 'Password', login.password, 'concealed', item.viewPassword),
         field('login.totp', 'One-time password', login.totp, 'totp'),
+        ...login.passkeys.map((passkey, i) =>
+          field(`login.passkey.${String(i)}`, 'Passkey', `Saved for ${passkey.rpId}`),
+        ),
       ]),
     );
   }

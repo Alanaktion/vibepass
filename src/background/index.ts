@@ -23,6 +23,7 @@ import { DEFAULT_SETTINGS, loadSettings, saveSettings, type Settings } from '../
 import { vaultCache } from '../storage/vault-cache';
 import { VaultState } from '../vault/state';
 import { createAutofill } from './autofill';
+import { createPasskeys } from './passkeys';
 import { AUTO_LOCK_ALARM, createAutoLock } from './autolock';
 import { CLIPBOARD_ALARM, createClipboard } from './clipboard';
 import { createHandlers } from './handlers';
@@ -113,6 +114,8 @@ const autofill = createAutofill({
   },
 });
 
+const passkeys = createPasskeys({ vault, search, service, settings });
+
 const autoLock = createAutoLock({
   idle: browser.idle,
   settings,
@@ -129,6 +132,7 @@ const route = createRouter(
     search,
     service,
     autofill,
+    passkeys,
     clipboard,
     settings: { load: settings, save: saveSettings },
     openPopup: () => browser.action.openPopup(),

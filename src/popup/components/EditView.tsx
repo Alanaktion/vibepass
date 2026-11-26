@@ -1,5 +1,5 @@
 import { ArrowLeft, Eye, EyeOff, Plus, RefreshCw, X } from 'lucide-preact';
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { isCodedError } from '../../shared/errors';
 import { sendMessage } from '../../shared/messaging';
 import { newDraft } from '../../vault/draft';
@@ -175,8 +175,10 @@ export function EditView({ id, type, onSaved, onCancel }: Props) {
   }
 
   // Keep the latest handlers for the document-level shortcuts without re-binding each render.
+  // A layout effect, so Ctrl+S pressed right after typing saves what was just typed (a plain
+  // effect runs after paint, and the shortcut could save the draft from before the last key).
   const handlersRef = useRef({ save, cancel });
-  useEffect(() => {
+  useLayoutEffect(() => {
     handlersRef.current = { save, cancel };
   });
   useEffect(() => {

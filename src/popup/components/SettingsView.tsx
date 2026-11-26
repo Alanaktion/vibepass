@@ -174,6 +174,21 @@ export function SettingsView({ onBack, onSettings, onOpen }: Props) {
             />
             Offer to save new logins and changed passwords
           </label>
+          <label class="check">
+            <input
+              type="checkbox"
+              checked={settings.passkeys}
+              onChange={(e) => {
+                save({ passkeys: e.currentTarget.checked });
+              }}
+            />
+            Use passkeys saved in Vibepass
+          </label>
+          <p class="muted small">
+            Sign in with passkeys from your vault
+            {settings.allowEdits ? ', and save new ones to it' : ''}. Choose “Use another device” to
+            use your browser or a security key instead.
+          </p>
           {settings.allowEdits && (
             <div class="row">
               <button

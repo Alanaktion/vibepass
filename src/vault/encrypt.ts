@@ -17,6 +17,7 @@ import {
   type SymmetricKey,
 } from '../crypto';
 import type { DecryptedCipher } from './decrypt';
+import type { StoredPasskey } from './passkey';
 import { CipherType, FieldType, type ItemDraft } from './types';
 
 /** The body of POST /api/ciphers and PUT /api/ciphers/{id}. Loosely typed on purpose. */
@@ -55,6 +56,13 @@ export interface EncryptContext {
   now: Date;
 }
 
+/**
+ * A passkey change saved along with a draft: a new passkey to add to the login, or a new
+ * signature counter for one it has. Other passkeys pass through untouched.
+ */
+export type PasskeyChange =
+  { add: StoredPasskey } | { counter: { credentialId: string; value: number } };
+
 /** True when Vibepass can safely re-encrypt this cipher (field-level format, not a sealed blob). */
 export function canEncrypt(cipher: CipherResponse): boolean {
   const raw = cipher as unknown as Record<string, unknown>;
@@ -75,6 +83,7 @@ export async function encryptDraft(
   base: CipherResponse | null,
   previous: DecryptedCipher | null,
   context: EncryptContext,
+  passkey?: PasskeyChange,
 ): Promise<CipherRequest> {
   if (base && !canEncrypt(base)) throw new UnsupportedCipherError();
   const request: CipherRequest = base
@@ -132,6 +141,26 @@ export async function encryptDraft(
         uri: uris[0]?.uri ?? null,
         passwordRevisionDate: changed ? now : (old.passwordRevisionDate ?? null),
       };
+      if (passkey) {
+        const stored = Array.isArray(old.fido2Credentials)
+          ? (old.fido2Credentials as Record<string, unknown>[])
+          : [];
+        if ('add' in passkey) {
+          (request.login as Record<string, unknown>).fido2Credentials = [
+            ...stored,
+            await encryptPasskey(passkey.add, enc),
+          ];
+        } else {
+          const index = (previous?.login?.passkeys ?? []).findIndex(
+            (p) => p.credentialId === passkey.counter.credentialId,
+          );
+          const entry = stored[index];
+          if (!entry) throw new Error('That passkey is no longer on this item');
+          const next = [...stored];
+          next[index] = { ...entry, counter: await enc(String(passkey.counter.value)) };
+          (request.login as Record<string, unknown>).fido2Credentials = next;
+        }
+      }
       if (changed && oldPassword) {
         const history = Array.isArray(base?.passwordHistory) ? base.passwordHistory : [];
         request.passwordHistory = [
@@ -173,6 +202,28 @@ export async function encryptDraft(
     if (base?.key) itemKey.fill(0);
     fresh?.fill(0);
   }
+}
+
+/** A passkey in the server's format; every field but the creation date is encrypted. */
+async function encryptPasskey(
+  passkey: StoredPasskey,
+  enc: (value: string | null | undefined) => Promise<EncString | null>,
+): Promise<Record<string, unknown>> {
+  return {
+    credentialId: await enc(passkey.credentialId),
+    keyType: await enc(passkey.keyType),
+    keyAlgorithm: await enc(passkey.keyAlgorithm),
+    keyCurve: await enc(passkey.keyCurve),
+    keyValue: await enc(passkey.keyValue),
+    rpId: await enc(passkey.rpId),
+    userHandle: await enc(passkey.userHandle),
+    userName: await enc(passkey.userName),
+    counter: await enc(String(passkey.counter)),
+    rpName: await enc(passkey.rpName),
+    userDisplayName: await enc(passkey.userDisplayName),
+    discoverable: await enc(String(passkey.discoverable)),
+    creationDate: passkey.creationDate,
+  };
 }
 
 /** The decrypted item as a draft, for the editor. */

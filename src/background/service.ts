@@ -40,16 +40,18 @@ import {
   cipherKey,
   type DecryptedCipher,
 } from '../vault/decrypt';
-import { encryptDraft, toDraft } from '../vault/encrypt';
+import { encryptDraft, newDraft, toDraft, type PasskeyChange } from '../vault/encrypt';
+import type { StoredPasskey } from '../vault/passkey';
 import type { VaultState } from '../vault/state';
 import { generateTotp, type TotpCode } from '../vault/totp';
-import type {
-  CipherDetail,
-  EditableItem,
-  FolderSummary,
-  ItemDraft,
-  PasswordHistoryEntry,
-  TrashItem,
+import {
+  CipherType,
+  type CipherDetail,
+  type EditableItem,
+  type FolderSummary,
+  type ItemDraft,
+  type PasswordHistoryEntry,
+  type TrashItem,
 } from '../vault/types';
 
 export interface ServiceDeps {
@@ -587,12 +589,15 @@ export class VaultService {
    * the editor started from; if the server or a sync has a newer one, this throws a conflict
    * unless `overwrite` is set, in which case it syncs and saves over the newest copy.
    */
-  async saveItem(request: {
-    id: string | null;
-    draft: ItemDraft;
-    revisionDate?: string | undefined;
-    overwrite?: boolean | undefined;
-  }): Promise<string> {
+  async saveItem(
+    request: {
+      id: string | null;
+      draft: ItemDraft;
+      revisionDate?: string | undefined;
+      overwrite?: boolean | undefined;
+    },
+    passkey?: PasskeyChange,
+  ): Promise<string> {
     const { api, account, userKey } = await this.writer();
     if (request.overwrite) await this.runSync(true);
     const base = request.id ? this.vault.raw(request.id) : null;
@@ -610,11 +615,13 @@ export class VaultService {
     ) {
       throw new Error('That folder no longer exists');
     }
-    const body = await encryptDraft(request.draft, base, previous, {
-      ownerKey,
-      userId: account.userId,
-      now: new Date(this.deps.now()),
-    });
+    const body = await encryptDraft(
+      request.draft,
+      base,
+      previous,
+      { ownerKey, userId: account.userId, now: new Date(this.deps.now()) },
+      passkey,
+    );
     const saved =
       base && request.id ? await api.updateCipher(request.id, body) : await api.createCipher(body);
     await this.applyCipher(account, saved);
@@ -628,6 +635,58 @@ export class VaultService {
   async credentials(id: string): Promise<{ username: string | null; password: string | null }> {
     const item = await this.decryptItem(id, null);
     return { username: item.login?.username ?? null, password: item.login?.password ?? null };
+  }
+
+  // --- Passkeys -----------------------------------------------------------------------------
+
+  /** Logins in the vault (not the trash) that hold passkeys, decrypted. Worker use only. */
+  async passkeyLogins(): Promise<DecryptedCipher[]> {
+    await this.ready;
+    const out: DecryptedCipher[] = [];
+    for (const summary of this.vault.items) {
+      if (summary.type !== CipherType.Login) continue;
+      const raw = this.vault.raw(summary.id);
+      if (!raw?.login?.fido2Credentials?.length || raw.deletedDate) continue;
+      out.push(await this.decryptItem(summary.id, null));
+    }
+    return out;
+  }
+
+  /** One login, decrypted, for signing with its passkey. Asks for re-prompt like a fill. */
+  passkeyLogin(id: string, masterPassword?: string): Promise<DecryptedCipher> {
+    return this.decryptItem(id, { masterPassword });
+  }
+
+  /**
+   * Save a new passkey: onto an existing login when `id` is set, else as a new login named for
+   * the site. Needs editing turned on, like every write.
+   */
+  async savePasskey(id: string | null, passkey: StoredPasskey): Promise<string> {
+    if (id) {
+      const item = await this.decryptItem(id, null);
+      if (!item.login) throw new Error('Passkeys can only be saved on logins');
+      const draft = toDraft(item);
+      if (draft.login && !draft.login.username && passkey.userName) {
+        draft.login.username = passkey.userName;
+      }
+      return this.saveItem({ id, draft, revisionDate: item.revisionDate }, { add: passkey });
+    }
+    const draft = newDraft(CipherType.Login);
+    draft.name = passkey.rpName || passkey.rpId;
+    if (draft.login) {
+      draft.login.username = passkey.userName ?? '';
+      draft.login.uris = [{ uri: `https://${passkey.rpId}`, match: null }];
+    }
+    return this.saveItem({ id: null, draft }, { add: passkey });
+  }
+
+  /** Store a passkey's new signature counter. */
+  async savePasskeyCounter(id: string, credentialId: string, value: number): Promise<void> {
+    const item = await this.decryptItem(id, null);
+    await this.saveItem(
+      { id, draft: toDraft(item), revisionDate: item.revisionDate },
+      { counter: { credentialId, value } },
+    );
   }
 
   /** Change only a login's password (from the update banner), keeping the old one in history. */

@@ -15,6 +15,7 @@ export default defineConfig(
       'scripts/dev/live-check.mjs',
       'scripts/dev/inline-menu-check.mjs',
       'scripts/dev/write-check.mjs',
+      'scripts/dev/passkey-check.mjs',
     ],
   },
   js.configs.recommended,

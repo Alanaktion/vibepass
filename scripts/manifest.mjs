@@ -50,6 +50,21 @@ export function createManifest(browser, pkg) {
         run_at: 'document_idle',
         all_frames: false,
       },
+      // Passkeys: the prompt, and a stand-in for navigator.credentials in the page's own world,
+      // which must be in place before the page's scripts run.
+      {
+        matches: ['https://*/*', 'http://*/*'],
+        js: ['passkey.js'],
+        run_at: 'document_start',
+        all_frames: false,
+      },
+      {
+        matches: ['https://*/*', 'http://*/*'],
+        js: ['webauthn-page.js'],
+        run_at: 'document_start',
+        all_frames: false,
+        world: 'MAIN',
+      },
     ],
     commands: {
       _execute_action: {

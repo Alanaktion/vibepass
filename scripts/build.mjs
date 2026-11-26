@@ -4,10 +4,10 @@
  *
  *   node scripts/build.mjs --browser chrome|firefox [--watch]
  *
- * Runs three Vite builds because each entry has a different output format:
+ * Runs one Vite build per entry because each has a different output format:
  * - popup:      HTML page, ES modules
  * - background: single ES module (service worker in Chrome, module script in Firefox)
- * - content:    single classic script (IIFE); content scripts can't be ES modules
+ * - content:    single classic scripts (IIFE); content scripts can't be ES modules
  */
 import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
@@ -80,18 +80,21 @@ await Promise.all([
       },
     },
   }),
-  build({
-    ...shared,
-    build: {
-      ...shared.build,
-      lib: {
-        entry: `${root}src/content/index.ts`,
-        formats: ['iife'],
-        name: 'vibepassContent',
-        fileName: () => 'content.js',
+  ...[
+    // Content scripts: login fields and the inline menu (document idle), the passkey prompt
+    // (document start), and the page-world stand-in for navigator.credentials (document start).
+    { entry: 'src/content/index.ts', name: 'vibepassContent', file: 'content.js' },
+    { entry: 'src/content/passkey.ts', name: 'vibepassPasskey', file: 'passkey.js' },
+    { entry: 'src/content/webauthn-page.ts', name: 'vibepassWebauthn', file: 'webauthn-page.js' },
+  ].map(({ entry, name, file }) =>
+    build({
+      ...shared,
+      build: {
+        ...shared.build,
+        lib: { entry: `${root}${entry}`, formats: ['iife'], name, fileName: () => file },
       },
-    },
-  }),
+    }),
+  ),
 ]);
 
 // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- JSON.parse returns any

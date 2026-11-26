@@ -38,6 +38,14 @@ autofill, and a calm item view. Nothing to migrate.
   password" (following the site's `passwordrules` when it has them). After you sign in, sign up,
   or change a password, a small banner offers to save the login or update the saved password.
   You can edit the name before saving, pick which login to update, or say "Never for this site".
+- **Passkeys:** when a site asks to sign in with a passkey and your vault has one for it
+  (saved by Vibepass or any Bitwarden client), Vibepass shows its own prompt: pick the passkey,
+  or choose "Use another device or security key" to get the browser's usual sheet. With editing
+  on, sites that make a new passkey get "Save a passkey for this site?", saved as a new login or
+  onto a login you already have for the site. If Vibepass is locked it offers to unlock first.
+  "Use passkeys saved in Vibepass" in Settings turns this off. Not yet: passkeys in the inline
+  menu (sites that only offer them as autofill suggestions), cross-origin iframes, and items
+  with master password re-prompt.
 - To stop the browser's own password manager from offering to save or fill passwords, turn on
   "Turn off the browser's built-in password manager" in Settings. Vibepass asks for the
   `privacy` permission only then. Browsers have no API for an extension to register as the
@@ -99,7 +107,7 @@ src/
   popup/        Preact UI: setup, unlock, quick find, item view, editor, generator, folders,
                 trash, settings
   offscreen/    Chrome-only offscreen document that writes the clipboard for the worker
-  content/      Content script: field detection, filling, inline menu, save banner
+  content/      Content scripts: field detection, filling, inline menu, save banner, passkeys
   api/          Bitwarden server API client: login, sync, and cipher and folder writes
   crypto/       Thin wrapper over Bitwarden's SDK (WASM): KDF, keys, EncString, generator
   storage/      Settings (storage.local), session key (storage.session), vault cache (IndexedDB)
@@ -122,9 +130,11 @@ in `src/background/handlers.ts`; TypeScript will flag a missing handler.
 
 ### Build
 
-`scripts/build.mjs` runs three Vite builds into `dist/<browser>/`, because each entry point needs a
-different output format: the popup is an HTML page, the background is a single ES module, and the
-content script is a classic IIFE (content scripts can't be modules). The manifest differs per
+`scripts/build.mjs` runs one Vite build per entry point into `dist/<browser>/`, because each needs
+a different output format: the popup is an HTML page, the background is a single ES module, and
+the content scripts are classic IIFEs (content scripts can't be modules). Passkeys add two content
+scripts that run at document start: `passkey.js` (the prompt) and `webauthn-page.js`, which runs
+in the page's own world to stand in for `navigator.credentials`. The manifest differs per
 browser only where it must: Chrome uses `background.service_worker`, Firefox uses
 `background.scripts` and `browser_specific_settings.gecko`.
 
@@ -175,11 +185,13 @@ npm run build:chrome
 node scripts/dev/live-check.mjs http://127.0.0.1:8000 live@example.test 'live test password'
 node scripts/dev/inline-menu-check.mjs http://127.0.0.1:8000 live@example.test 'live test password'
 node scripts/dev/write-check.mjs http://127.0.0.1:8000 live@example.test 'live test password'
+node scripts/dev/passkey-check.mjs http://127.0.0.1:8000 live@example.test 'live test password'
 ```
 
 `write-check.mjs` writes to the vault (create, edit, conflicts, folders, trash, the save banner)
-and reads every write back with Bitwarden's own cipher code from a separate login. Run it only
-against a throwaway test server.
+and reads every write back with Bitwarden's own cipher code from a separate login.
+`passkey-check.mjs` makes and uses passkeys on a local test site (localhost:8091) that verifies
+them like a real one, and also writes. Run both only against a throwaway test server.
 
 Vaultwarden rate-limits logins (10 a minute by default), so wait a minute between repeated runs.
 
@@ -190,7 +202,8 @@ The web vault needs HTTPS, so create a self-signed `ssl/cert.pem` and `ssl/key.p
 
 See [docs/PLAN.md](docs/PLAN.md) for the phased build plan. Phases 0 and 1 are done, with a
 basic inline menu and multi-step logins pulled forward from Phase 3. **Phase 2 (write support)**
-is built and in its trial: save, update, edit, generate, and organize, behind a setting. Contributors and coding agents: start
+is built and in its trial: save, update, edit, generate, and organize, behind a setting. Basic
+passkey support (sign in, and save with editing on) is pulled forward from "Later". Contributors and coding agents: start
 with [AGENTS.md](AGENTS.md).
 
 ## License
