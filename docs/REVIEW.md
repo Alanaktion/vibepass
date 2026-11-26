@@ -6,6 +6,9 @@ Vibepass is a keyboard-first password manager for self-hosted Bitwarden and Vaul
 Find a login, fill a form, copy a one-time code, or use a saved passkey. Enable editing to
 generate passwords, save new logins, organize folders, and restore items from trash.
 
+The screenshots show the Firefox popup using the disposable compatibility vault.
+[Quick find](store/quick-find.png) · [Login item](store/item.png)
+
 ## Permission justifications
 
 | Access                                   | User action or background work                                                                                                                                                                        |
@@ -38,11 +41,11 @@ A third-party assessment and testing with assistive technology remain release ga
 
 ## Compatibility and packaging
 
-| Target                | Recorded coverage                                                                                                                                                    |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Vaultwarden 1.37.5    | Seeded Chromium login, unlock, fill, inline menu, editing, and passkey checks. The compatibility workflow runs the pinned version and adds latest on its weekly run. |
-| Self-hosted Bitwarden | Official-client crypto fixtures and SDK round trips. A live server run is still required before claiming server-version support.                                     |
-| Firefox               | Production build and a previously reported Vaultwarden login. Full live parity for writes, passkeys, and inline UI remains open.                                     |
+| Target                | Recorded coverage                                                                                                                                                                   |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Vaultwarden 1.37.5    | Seeded Chromium login, unlock, fill, inline menu, editing, and passkey checks. The compatibility workflow runs the pinned version and adds latest on its weekly run.                |
+| Self-hosted Bitwarden | Official-client crypto fixtures and SDK round trips. A live server run is still required before claiming server-version support.                                                    |
+| Firefox               | Firefox 153 temporary add-on against Vaultwarden 1.37.5. Login, five-item sync, lock, unlock, and search passed. Full live parity for writes, passkeys, and inline UI remains open. |
 
 Treat a server version as verified for a feature only after the corresponding live check passes.
 Use the compatibility workflow run for the relevant commit to check current results.

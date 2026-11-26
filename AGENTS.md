@@ -25,13 +25,13 @@ status notes current when you finish a milestone.
 | 0. Spike         | Log in, sync, decrypt a real vault       | Done on Vaultwarden; self-hosted Bitwarden still to verify |
 | 1. MVP           | Read-only daily driver                   | Built; Alan's 2-week daily-use trial is the exit gate      |
 | 2. Write support | Save, update, edit, generate, organize   | Built behind a setting; Alan's lifecycle trial is the gate |
-| 3. Beta          | Quality, breadth, security for others    | Milestones 1-2 in basic form (inline menu, form types)     |
-| 4. v1            | Chrome Web Store and Firefox Add-ons     | Not started                                                |
+| 3. Beta          | Quality, breadth, security for others    | Inline search, form types, first site rule and corpus      |
+| 4. v1            | Chrome Web Store and Firefox Add-ons     | Onboarding and unsigned review packages built              |
 | Later            | Passkeys, cards/identities, Safari, etc. | Basic passkeys built (sign in; save with editing on)       |
 
 Known gaps carried forward: a live check against self-hosted Bitwarden, Firefox live testing of
-the Phase 1 features and inline menu, running the live check in CI, the notifications hub (sync
-polls instead), WebAuthn and Duo two-step login, equivalent domains, and the autofill page corpus.
+autofill, editing, and passkeys, the notifications hub (sync polls instead), WebAuthn and Duo
+two-step login, and expanding the autofill corpus beyond the first three forms.
 
 Rules that hold in every phase:
 

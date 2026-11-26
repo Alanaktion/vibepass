@@ -9,7 +9,7 @@ on:
 permissions:
   contents: read
 jobs:
-  chromium:
+  browsers:
     runs-on: ubuntu-24.04
     strategy:
       matrix:
@@ -30,11 +30,11 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - run: npm run build:chrome
+      - run: npm run build
       - name: Install the browser test driver
         run: |
           npm install --prefix "$RUNNER_TEMP/driver" playwright@1.62.1
-          "$RUNNER_TEMP/driver/node_modules/.bin/playwright" install --with-deps chromium
+          "$RUNNER_TEMP/driver/node_modules/.bin/playwright" install --with-deps chromium firefox
       - name: Exercise the disposable vault
         run: |
           export NODE_PATH="$RUNNER_TEMP/driver/node_modules"
@@ -47,6 +47,7 @@ jobs:
           node scripts/dev/seed-vault.mjs "$server" test@example.test "$site"
           node scripts/dev/register-account.mjs "$server" otp@example.test argon2id
           node scripts/dev/seed-vault.mjs "$server" otp@example.test "$site" --two-factor
+          node scripts/dev/firefox-check.mjs "$server" test@example.test
           node scripts/dev/live-check.mjs "$server" test@example.test otp@example.test
           node scripts/dev/inline-menu-check.mjs "$server" test@example.test
           node scripts/dev/write-check.mjs "$server" test@example.test

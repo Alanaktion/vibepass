@@ -19,6 +19,8 @@ Last updated: 2026-11-26 (basic passkeys pulled forward from Later).
 - CI has a pinned Vaultwarden compatibility job, a weekly latest-version run, and a workflow
   for reproducible unsigned packages. Privacy, threat model, permission justifications, server
   coverage, feedback, and disclosure materials are linked from the README.
+- A temporary Firefox 153 add-on passed login, five-item sync, lock, unlock, and search against
+  Vaultwarden 1.37.5. The repeatable smoke test runs in the compatibility workflow.
 - Release gates still include self-hosted Bitwarden and Firefox live parity, daily-use trials,
   a third-party review, signed distribution, and beta feedback.
 

@@ -12,6 +12,7 @@ export default defineConfig(
       'dist/',
       'coverage/',
       'node_modules/',
+      'scripts/dev/firefox-check.mjs',
       'scripts/dev/live-check.mjs',
       'scripts/dev/inline-menu-check.mjs',
       'scripts/dev/write-check.mjs',
