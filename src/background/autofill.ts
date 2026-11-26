@@ -53,6 +53,8 @@ export interface FillRequest {
   id: string;
   confirmedOrigin?: string | undefined;
   masterPassword?: string | undefined;
+  /** The popup's session, which may already have passed the re-prompt. */
+  session?: string | undefined;
 }
 
 export function createAutofill(deps: AutofillDeps) {
@@ -130,7 +132,10 @@ export function createAutofill(deps: AutofillDeps) {
       }
     }
 
-    const { item, totp } = await deps.service.fillData(request.id, request.masterPassword);
+    const { item, totp } = await deps.service.fillData(request.id, {
+      masterPassword: request.masterPassword,
+      session: request.session,
+    });
     const result = (await deps.tabs.send(request.tabId, {
       source: 'vibepass',
       type: 'content:fill',

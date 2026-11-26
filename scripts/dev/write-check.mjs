@@ -6,7 +6,7 @@
  * clients use) from a separate login, so "the official clients see the same thing" is checked
  * against a real server, not just in unit tests. Dev and test use only; it writes to the vault.
  *
- *   node scripts/dev/write-check.mjs <serverUrl> <email>
+ *   node scripts/dev/write-check.mjs <serverUrl> <email> [screenshotDir]
  *
  * The page server listens on 127.0.0.1:8090, which is what seed-vault.mjs saved the logins for.
  */
@@ -24,7 +24,7 @@ const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
 
 const password = process.env.VIBEPASS_TEST_PASSWORD;
-const [serverUrl, email] = process.argv.slice(2);
+const [serverUrl, email, shots] = process.argv.slice(2);
 if (!serverUrl || !email || !password) {
   console.error('Set VIBEPASS_TEST_PASSWORD and run: write-check.mjs <serverUrl> <email>');
   process.exit(2);
@@ -218,7 +218,8 @@ try {
   await popup.keyboard.press('Escape');
 
   // New login through the popup, with a generated password.
-  await popup.getByRole('button', { name: 'New login' }).first().click();
+  await popup.getByRole('button', { name: 'New item' }).click();
+  await popup.getByRole('menuitem', { name: 'Login' }).click();
   await popup.getByLabel('Name', { exact: true }).fill('Created by Vibepass');
   await popup.getByLabel('Username', { exact: true }).fill('new-user@example.test');
   await popup.getByRole('button', { name: 'Generate a password' }).click();
@@ -265,6 +266,94 @@ try {
     view?.login?.password === 'a new password 1' &&
       view.passwordHistory?.[0]?.password === generated,
   );
+
+  // A new card through the popup, with the master password re-prompt on.
+  await popup.keyboard.press('Escape');
+  await popup.getByLabel('Search vault', { exact: true }).waitFor();
+  await popup.getByRole('button', { name: 'New item' }).click();
+  await popup.getByRole('menuitem', { name: 'Card' }).click();
+  await popup.getByLabel('Name', { exact: true }).fill('Vibepass card');
+  await popup.getByLabel('Cardholder name', { exact: true }).fill('Alice Example');
+  await popup.getByLabel('Number', { exact: true }).fill('5555 5555 5555 4444');
+  await popup.getByLabel('Expiration month', { exact: true }).selectOption('7');
+  await popup.getByLabel('Expiration year', { exact: true }).fill('31');
+  await popup.getByLabel('Security code', { exact: true }).fill('321');
+  await popup.getByLabel('Ask for my master password before showing or filling').check();
+  if (shots) await popup.screenshot({ path: join(shots, 'card-edit.png') });
+  await popup.getByRole('button', { name: 'Save' }).click();
+  await popup.getByRole('dialog', { name: 'Master password required' }).waitFor({ timeout: 3000 });
+  // Opening the new protected item asks once.
+  await popup.getByLabel('Master password', { exact: true }).fill(password);
+  await popup.getByRole('button', { name: 'Continue' }).click();
+  await popup.getByRole('button', { name: 'Edit' }).waitFor();
+  const card = (await send('vault:search', { query: 'Vibepass card' })).data[0];
+  server = await officialRead();
+  view = server.views.get(card.id);
+  check(
+    'new card reads back in the official client',
+    view?.type === 3 &&
+      view.reprompt === 1 &&
+      view.card?.cardholderName === 'Alice Example' &&
+      view.card.brand === 'Mastercard' &&
+      view.card.number === '5555555555554444' &&
+      view.card.expMonth === '7' &&
+      view.card.expYear === '2031' &&
+      view.card.code === '321',
+  );
+
+  // The same popup reveals, copies, and edits the protected card without asking again.
+  await popup.getByRole('button', { name: 'Reveal Number' }).click();
+  await popup.getByText('5555555555554444').waitFor({ timeout: 3000 });
+  await popup.getByRole('button', { name: 'Edit' }).click();
+  await popup.getByLabel('Security code', { exact: true }).fill('654');
+  await popup.getByRole('button', { name: 'Save' }).click();
+  await popup.getByRole('button', { name: 'Edit' }).waitFor();
+  check(
+    'protected card: asked once, then not again while the popup is open',
+    (await popup.getByRole('dialog', { name: 'Master password required' }).count()) === 0,
+  );
+  server = await officialRead();
+  check('card edit saved', server.views.get(card.id)?.card?.code === '654');
+
+  // A new popup is a new session: it asks again.
+  await popup.reload();
+  await popup.getByLabel('Search vault', { exact: true }).waitFor();
+  const asked = await send('vault:item', { id: card.id });
+  check('a reopened popup asks again', asked.code === 'reprompt-required');
+
+  // A new identity through the popup.
+  await popup.getByRole('button', { name: 'New item' }).click();
+  await popup.getByRole('menuitem', { name: 'Identity' }).click();
+  await popup.getByLabel('Name', { exact: true }).fill('Vibepass identity');
+  await popup.getByLabel('Title', { exact: true }).selectOption('Dr');
+  await popup.getByLabel('First name', { exact: true }).fill('Alice');
+  await popup.getByLabel('Last name', { exact: true }).fill('Exämple');
+  await popup.getByLabel('Email', { exact: true }).fill('alice@example.test');
+  await popup.getByLabel('Address line 1', { exact: true }).fill('1 Main St');
+  await popup.getByLabel('City or town', { exact: true }).fill('Springfield');
+  await popup.getByLabel('Postal code', { exact: true }).fill('97477');
+  await popup.getByLabel('Passport number', { exact: true }).fill('X1234567');
+  if (shots) await popup.screenshot({ path: join(shots, 'identity-edit.png'), fullPage: true });
+  await popup.getByRole('button', { name: 'Save' }).click();
+  await popup.getByRole('button', { name: 'Edit' }).waitFor();
+  if (shots) await popup.screenshot({ path: join(shots, 'identity-view.png'), fullPage: true });
+  const identity = (await send('vault:search', { query: 'Vibepass identity' })).data[0];
+  server = await officialRead();
+  view = server.views.get(identity.id);
+  check(
+    'new identity reads back in the official client',
+    view?.type === 4 &&
+      view.identity?.title === 'Dr' &&
+      view.identity.firstName === 'Alice' &&
+      view.identity.lastName === 'Exämple' &&
+      view.identity.email === 'alice@example.test' &&
+      view.identity.address1 === '1 Main St' &&
+      view.identity.city === 'Springfield' &&
+      view.identity.postalCode === '97477' &&
+      view.identity.passportNumber === 'X1234567' &&
+      view.identity.ssn == null,
+  );
+  await popup.keyboard.press('Escape');
 
   // Editing a seeded login with an attachment, custom field, and TOTP keeps all of them.
   const local = (await send('vault:search', { query: 'Local Test Site' })).data[0];
@@ -464,7 +553,10 @@ try {
     'no banner for a login that is already saved',
     (await site.locator('vibepass-banner').count()) === 0,
   );
-} catch {
+} catch (error) {
+  // First line only: Playwright's call log can echo typed values, such as the password.
+  console.error(String(error instanceof Error ? error.message : error).split('\n')[0]);
+  if (shots) await popup.screenshot({ path: join(shots, 'failure.png'), fullPage: true });
   check('unexpected error', false);
 } finally {
   await context.close();

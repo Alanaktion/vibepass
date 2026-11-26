@@ -4,7 +4,7 @@
  * the server's casing, which differs between endpoints (identity responses are PascalCase).
  */
 import type { KdfType } from '../crypto/types';
-import type { CipherType, FieldType, UriMatch } from '../vault/types';
+import type { CipherType, FieldType, IdentityFieldName, UriMatch } from '../vault/types';
 
 /** POST /identity/accounts/prelogin */
 export interface PreloginResponse {
@@ -143,25 +143,7 @@ export interface Fido2CredentialResponse {
   creationDate: string;
 }
 
-export type IdentityField =
-  | 'title'
-  | 'firstName'
-  | 'middleName'
-  | 'lastName'
-  | 'address1'
-  | 'address2'
-  | 'address3'
-  | 'city'
-  | 'state'
-  | 'postalCode'
-  | 'country'
-  | 'company'
-  | 'email'
-  | 'phone'
-  | 'ssn'
-  | 'username'
-  | 'passportNumber'
-  | 'licenseNumber';
+export type IdentityField = IdentityFieldName;
 
 export interface AttachmentResponse {
   id: string;

@@ -69,12 +69,11 @@ export function createHandlers(ctx: BackgroundContext): Handlers {
       if (!vault.isUnlocked) return [];
       return search.search(query, url === undefined ? {} : { url });
     },
-    'vault:item': ({ id, masterPassword }) => service.item(id, masterPassword),
-    'vault:reveal': ({ id, fieldId, masterPassword }) =>
-      service.reveal(id, fieldId, masterPassword),
-    'vault:totp': ({ id, masterPassword }) => service.totp(id, masterPassword),
-    'vault:attachment': ({ id, attachmentId, masterPassword }) =>
-      service.attachment(id, attachmentId, masterPassword),
+    'vault:item': ({ id, ...auth }) => service.item(id, auth),
+    'vault:reveal': ({ id, fieldId, ...auth }) => service.reveal(id, fieldId, auth),
+    'vault:totp': ({ id, ...auth }) => service.totp(id, auth),
+    'vault:attachment': ({ id, attachmentId, ...auth }) =>
+      service.attachment(id, attachmentId, auth),
 
     'autofill:fill': (request) => need(ctx.autofill, 'Autofill').fill(request),
     'autofill:page-ready': ({ loginForms }, sender) => {
@@ -133,7 +132,7 @@ export function createHandlers(ctx: BackgroundContext): Handlers {
       return need(ctx.passkeys, 'Passkeys').create(url, request, cipherId);
     },
 
-    'vault:edit': ({ id, masterPassword }) => service.editable(id, masterPassword),
+    'vault:edit': ({ id, ...auth }) => service.editable(id, auth),
     'vault:save': async (request) => ({ id: await service.saveItem(request) }),
     'vault:organize': ({ id, ...patch }) => service.organize(id, patch).then(() => undefined),
     'vault:trash-item': ({ id }) => service.trashItem(id).then(() => undefined),

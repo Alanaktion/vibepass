@@ -2,25 +2,29 @@ import { ArrowLeft, Eye, EyeOff, Plus, RefreshCw, X } from 'lucide-preact';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { isCodedError } from '../../shared/errors';
 import { sendMessage } from '../../shared/messaging';
-import { newDraft } from '../../vault/draft';
+import { newDraft, normalizeCard, type NewItemType } from '../../vault/draft';
 import { parseTotp } from '../../vault/totp';
 import { toWebUrl } from '../../vault/uri';
 import {
   CipherType,
   FieldType,
+  type CardDraft,
   type DraftField,
   type FolderSummary,
+  type IdentityDraft,
   type ItemDraft,
 } from '../../vault/types';
 import { pw } from '../actions';
 import { usePopup } from '../context';
 import { errorMessage, hasMod, modLabel, withReprompt } from '../lib';
+import { CardFields, IdentityFields, SecretInput } from './DetailsEditor';
 import { IconButton } from './IconButton';
 
 interface Props {
   /** null creates a new item. */
   id: string | null;
-  type: CipherType.Login | CipherType.SecureNote;
+  /** The type of a new item; an existing item keeps its own. */
+  type: NewItemType;
   onSaved: (id: string) => void;
   onCancel: () => void;
 }
@@ -32,10 +36,7 @@ const FIELD_TYPES: { type: FieldType; label: string }[] = [
 ];
 
 /** A new login for the page the popup opened over: its address and a name from its host. */
-function draftForTab(
-  type: CipherType.Login | CipherType.SecureNote,
-  url: string | undefined,
-): ItemDraft {
+function draftForTab(type: NewItemType, url: string | undefined): ItemDraft {
   const draft = newDraft(type);
   const page = url ? toWebUrl(url) : null;
   if (page && draft.login) {
@@ -45,7 +46,15 @@ function draftForTab(
   return draft;
 }
 
-function validate(draft: ItemDraft): string | null {
+const NEW_TITLE: Record<NewItemType, string> = {
+  [CipherType.Login]: 'New login',
+  [CipherType.SecureNote]: 'New note',
+  [CipherType.Card]: 'New card',
+  [CipherType.Identity]: 'New identity',
+};
+
+/** Check a draft and tidy it for saving. Returns an error message instead when it can't save. */
+function prepare(draft: ItemDraft): ItemDraft | string {
   if (!draft.name.trim()) return 'Give the item a name';
   const totp = draft.login?.totp.trim();
   if (totp) {
@@ -55,7 +64,12 @@ function validate(draft: ItemDraft): string | null {
       return 'The one-time password key isn’t valid. Paste the setup key or otpauth:// link.';
     }
   }
-  return null;
+  if (draft.card) {
+    const card = normalizeCard(draft.card);
+    if (typeof card === 'string') return card;
+    return { ...draft, card };
+  }
+  return draft;
 }
 
 /**
@@ -119,6 +133,14 @@ export function EditView({ id, type, onSaved, onCancel }: Props) {
     change((d) => (d.login ? { ...d, login: { ...d.login, ...patch } } : d));
   }
 
+  function changeCard(patch: Partial<CardDraft>) {
+    change((d) => (d.card ? { ...d, card: { ...d.card, ...patch } } : d));
+  }
+
+  function changeIdentity(patch: Partial<IdentityDraft>) {
+    change((d) => (d.identity ? { ...d, identity: { ...d.identity, ...patch } } : d));
+  }
+
   function changeField(index: number, patch: Partial<DraftField>) {
     change((d) => ({
       ...d,
@@ -143,14 +165,14 @@ export function EditView({ id, type, onSaved, onCancel }: Props) {
 
   async function save() {
     if (!draft || saving) return;
-    const problem = validate(draft);
-    if (problem) {
-      setError(problem);
+    const ready = prepare(draft);
+    if (typeof ready === 'string') {
+      setError(ready);
       return;
     }
     setSaving(true);
     setError(null);
-    const request = { id, draft, ...(revisionDate ? { revisionDate } : {}) };
+    const request = { id, draft: ready, ...(revisionDate ? { revisionDate } : {}) };
     try {
       let saved;
       try {
@@ -199,7 +221,7 @@ export function EditView({ id, type, onSaved, onCancel }: Props) {
   }, []);
 
   const login = draft?.login ?? null;
-  const title = id ? 'Edit item' : type === CipherType.Login ? 'New login' : 'New note';
+  const title = id ? 'Edit item' : NEW_TITLE[type];
 
   return (
     <main class="screen edit">
@@ -334,6 +356,8 @@ export function EditView({ id, type, onSaved, onCancel }: Props) {
               </fieldset>
             </>
           )}
+          {draft.card && <CardFields card={draft.card} onChange={changeCard} />}
+          {draft.identity && <IdentityFields identity={draft.identity} onChange={changeIdentity} />}
           <label>
             Notes
             <textarea
@@ -487,30 +511,4 @@ export function EditView({ id, type, onSaved, onCancel }: Props) {
       )}
     </main>
   );
-}
-
-/** A text input that can hide its value. Same element either way, so focus stays put. */
-function SecretInput(props: {
-  shown: boolean;
-  value: string;
-  onValue: (value: string) => void;
-  id?: string;
-  class?: string | undefined;
-  label?: string;
-  placeholder?: string;
-  autocomplete: string;
-}) {
-  const common = {
-    id: props.id,
-    class: props.class,
-    value: props.value,
-    'aria-label': props.label,
-    placeholder: props.placeholder,
-    autocomplete: props.autocomplete,
-    spellcheck: false,
-    onInput: (e: Event) => {
-      props.onValue((e.currentTarget as HTMLInputElement).value);
-    },
-  };
-  return props.shown ? <input type="text" {...common} /> : <input type="password" {...common} />;
 }

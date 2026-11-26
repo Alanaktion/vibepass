@@ -23,6 +23,13 @@ vi.mock('webextension-polyfill', () => {
         id: 'test-extension-id',
         getURL: (path: string) => `chrome-extension://test-extension-id/${path}`,
         sendMessage: vi.fn(),
+        connect: vi.fn(() => ({
+          name: '',
+          postMessage: vi.fn(),
+          disconnect: vi.fn(),
+          onDisconnect: { addListener: vi.fn() },
+          onMessage: { addListener: vi.fn() },
+        })),
         onMessage: { addListener: vi.fn(), removeListener: vi.fn() },
         onInstalled: { addListener: vi.fn() },
       },

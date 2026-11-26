@@ -1,8 +1,10 @@
 import { isCodedError } from '../shared/errors';
+import type { RepromptFields } from '../shared/messages';
 import { sendMessage } from '../shared/messaging';
 import type { CipherSummary } from '../vault/types';
 import type { PopupContext } from './context';
 import { copyText, errorMessage, withReprompt } from './lib';
+import { popupSession } from './session';
 
 export type CopyWhat = 'username' | 'password' | 'totp';
 
@@ -56,8 +58,16 @@ export async function copyField(
   }
 }
 
-export function pw(masterPassword: string | undefined): { masterPassword?: string } {
-  return masterPassword === undefined ? {} : { masterPassword };
+/**
+ * Re-prompt fields for a request: the popup's session (so a password entered once covers the
+ * rest of this popup's life) and the master password when the user just typed it.
+ */
+export function pw(masterPassword: string | undefined): RepromptFields {
+  const session = popupSession();
+  return {
+    ...(session === undefined ? {} : { session }),
+    ...(masterPassword === undefined ? {} : { masterPassword }),
+  };
 }
 
 /**

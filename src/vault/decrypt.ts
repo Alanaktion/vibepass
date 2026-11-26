@@ -6,6 +6,7 @@ import {
   unwrapPrivateKey,
   type SymmetricKey,
 } from '../crypto';
+import { IDENTITY_FIELDS } from './draft';
 import { canEncrypt } from './encrypt';
 import type { StoredPasskey } from './passkey';
 import {
@@ -285,27 +286,6 @@ export interface DecryptedCipher {
   fields: { name: string; value: string | null; type: FieldType; linkedId: number | null }[];
   attachments: (AttachmentSummary & { key: string | null })[];
 }
-
-const IDENTITY_FIELDS: IdentityField[] = [
-  'title',
-  'firstName',
-  'middleName',
-  'lastName',
-  'address1',
-  'address2',
-  'address3',
-  'city',
-  'state',
-  'postalCode',
-  'country',
-  'company',
-  'email',
-  'phone',
-  'ssn',
-  'username',
-  'passportNumber',
-  'licenseNumber',
-];
 
 export async function decryptCipher(
   cipher: CipherResponse,

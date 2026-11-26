@@ -353,6 +353,8 @@ describe('popup', () => {
           totp: '',
           uris: [{ uri: 'https://login.example.com', match: null }],
         },
+        card: null,
+        identity: null,
         fields: [],
       },
     };
@@ -371,7 +373,7 @@ describe('popup', () => {
       fireEvent.click(await screen.findByText('Example Login'));
       await screen.findByText('alice');
       expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
-      expect(screen.queryByRole('button', { name: 'New login' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'New item' })).toBeNull();
     });
 
     it('edits an item and saves it with the revision it started from', async () => {
@@ -433,7 +435,8 @@ describe('popup', () => {
         'vault:save': () => ({ ok: true, data: { id: 'new' } }),
       });
       render(<App />);
-      fireEvent.click(await screen.findByRole('button', { name: 'New login' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'New item' }));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Login' }));
       expect((await screen.findByLabelText<HTMLInputElement>('Name')).value).toBe(
         'login.example.com',
       );
@@ -449,6 +452,118 @@ describe('popup', () => {
         expect(calls.find((c) => c.type === 'vault:save')?.payload).toMatchObject({
           id: null,
           draft: { login: { password: 'Gen3rated-Pass' } },
+        });
+      });
+    });
+
+    it('creates a card from the New item menu, with the brand filled in from the number', async () => {
+      const calls = writeBackend({ 'vault:save': () => ({ ok: true, data: { id: 'card' } }) });
+      render(<App />);
+      const button = await screen.findByRole('button', { name: 'New item' });
+      fireEvent.click(button);
+      const menu = await screen.findByRole('menu');
+      // Keyboard: the first choice has focus, and Down moves through the menu.
+      expect(document.activeElement?.textContent).toBe('Login');
+      fireEvent.keyDown(menu, { key: 'ArrowDown' });
+      fireEvent.keyDown(menu, { key: 'ArrowDown' });
+      expect(document.activeElement?.textContent).toBe('Card');
+      fireEvent.click(document.activeElement!);
+      expect(await screen.findByRole('heading', { name: 'New card' })).toBeTruthy();
+      fireEvent.input(screen.getByLabelText('Name'), { target: { value: 'Travel card' } });
+      fireEvent.input(screen.getByLabelText('Cardholder name'), {
+        target: { value: 'Alice Example' },
+      });
+      fireEvent.input(screen.getByLabelText('Number'), {
+        target: { value: '4111 1111 1111 1111' },
+      });
+      expect(screen.getByLabelText<HTMLSelectElement>('Brand').value).toBe('Visa');
+      fireEvent.change(screen.getByLabelText('Expiration month'), { target: { value: '4' } });
+      fireEvent.input(screen.getByLabelText('Expiration year'), { target: { value: '30' } });
+      fireEvent.input(screen.getByLabelText('Security code'), { target: { value: '123' } });
+      expect(screen.getByLabelText<HTMLInputElement>('Security code').type).toBe('password');
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => {
+        expect(calls.find((c) => c.type === 'vault:save')?.payload).toMatchObject({
+          id: null,
+          draft: {
+            type: CipherType.Card,
+            name: 'Travel card',
+            login: null,
+            card: {
+              cardholderName: 'Alice Example',
+              brand: 'Visa',
+              number: '4111111111111111',
+              expMonth: '4',
+              expYear: '2030',
+              code: '123',
+            },
+          },
+        });
+      });
+    });
+
+    it('refuses a card number with letters in it', async () => {
+      const calls = writeBackend();
+      render(<App />);
+      fireEvent.click(await screen.findByRole('button', { name: 'New item' }));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Card' }));
+      fireEvent.input(await screen.findByLabelText('Name'), { target: { value: 'Card' } });
+      fireEvent.input(screen.getByLabelText('Number'), { target: { value: '4111 abcd' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      expect(await screen.findByText(/card number should be/)).toBeTruthy();
+      expect(calls.some((c) => c.type === 'vault:save')).toBe(false);
+    });
+
+    it('edits an identity, keeping documents concealed until shown', async () => {
+      const identity = {
+        title: 'Dr',
+        firstName: 'Alice',
+        middleName: '',
+        lastName: 'Example',
+        address1: '1 Main St',
+        address2: '',
+        address3: '',
+        city: 'Springfield',
+        state: 'OR',
+        postalCode: '97477',
+        country: 'US',
+        company: '',
+        email: 'alice@example.com',
+        phone: '',
+        ssn: '123-45-6789',
+        username: '',
+        passportNumber: '',
+        licenseNumber: '',
+      };
+      const calls = writeBackend({
+        'vault:edit': () => ({
+          ok: true,
+          data: {
+            ...structuredClone(editable),
+            draft: {
+              ...structuredClone(editable.draft),
+              type: CipherType.Identity,
+              name: 'Me',
+              login: null,
+              identity,
+            },
+          },
+        }),
+      });
+      render(<App />);
+      fireEvent.click(await screen.findByText('Example Login'));
+      fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+      const ssn = await screen.findByLabelText<HTMLInputElement>('Social Security number');
+      expect(ssn.type).toBe('password');
+      fireEvent.click(screen.getByRole('button', { name: 'Show social security number' }));
+      expect(screen.getByLabelText<HTMLInputElement>('Social Security number').type).toBe('text');
+      expect(screen.getByLabelText<HTMLSelectElement>('Title').value).toBe('Dr');
+      fireEvent.input(screen.getByLabelText('Phone'), { target: { value: '555-0100' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => {
+        expect(calls.find((c) => c.type === 'vault:save')?.payload).toMatchObject({
+          id: 'a',
+          draft: { identity: { ...identity, phone: '555-0100' } },
         });
       });
     });

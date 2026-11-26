@@ -1,7 +1,8 @@
-import { KeyRound, Lock, Plus, RefreshCw, Settings, Star } from 'lucide-preact';
+import { KeyRound, Lock, RefreshCw, Settings, Star } from 'lucide-preact';
 import { Fragment } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { sendMessage } from '../../shared/messaging';
+import type { NewItemType } from '../../vault/draft';
 import { displayHost } from '../../vault/uri';
 import { CipherType, type SearchHit } from '../../vault/types';
 import { copyField, fillItem } from '../actions';
@@ -9,12 +10,13 @@ import { usePopup } from '../context';
 import { hasMod, iconUrl, modLabel } from '../lib';
 import { ItemIcon } from './Dialogs';
 import { IconButton } from './IconButton';
+import { NewItemMenu } from './NewItemMenu';
 
 interface Props {
   onOpen: (id: string) => void;
   onSettings: () => void;
   /** Start a new item (only offered when editing is turned on). */
-  onNew: (type: CipherType.Login | CipherType.SecureNote) => void;
+  onNew: (type: NewItemType) => void;
   onGenerator: () => void;
   /** Keeps the query when coming back from an item. */
   query: string;
@@ -125,15 +127,7 @@ export function QuickFind({ onOpen, onSettings, onNew, onGenerator, query, onQue
           onKeyDown={onKeyDown}
           autoFocus
         />
-        {settings?.allowEdits && (
-          <IconButton
-            icon={Plus}
-            label="New login"
-            onClick={() => {
-              onNew(CipherType.Login);
-            }}
-          />
-        )}
+        {settings?.allowEdits && <NewItemMenu onNew={onNew} />}
         <IconButton icon={KeyRound} label="Password generator" onClick={onGenerator} />
         <IconButton icon={Settings} label="Settings" onClick={onSettings} />
         <IconButton
@@ -211,7 +205,7 @@ export function QuickFind({ onOpen, onSettings, onNew, onGenerator, query, onQue
         <div class="empty">
           <p class="muted">{query ? `No items match “${query}”` : 'Your vault is empty'}</p>
           {settings?.allowEdits && (
-            <div class="row center">
+            <div class="row center wrap">
               <button
                 type="button"
                 class="ghost"
@@ -229,6 +223,24 @@ export function QuickFind({ onOpen, onSettings, onNew, onGenerator, query, onQue
                 }}
               >
                 New note
+              </button>
+              <button
+                type="button"
+                class="ghost"
+                onClick={() => {
+                  onNew(CipherType.Card);
+                }}
+              >
+                New card
+              </button>
+              <button
+                type="button"
+                class="ghost"
+                onClick={() => {
+                  onNew(CipherType.Identity);
+                }}
+              >
+                New identity
               </button>
             </div>
           )}

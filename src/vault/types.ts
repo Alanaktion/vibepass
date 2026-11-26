@@ -139,10 +139,47 @@ export interface DraftField {
   linkedId: number | null;
 }
 
+/** A payment card in the editor. Empty strings are saved as empty. */
+export interface CardDraft {
+  cardholderName: string;
+  /** The official clients' brand names: Visa, Mastercard, Amex, and so on. */
+  brand: string;
+  number: string;
+  /** "1" to "12", as the official clients store it. */
+  expMonth: string;
+  /** Four digits. */
+  expYear: string;
+  code: string;
+}
+
+/** The identity fields, as the server names them. */
+export type IdentityFieldName =
+  | 'title'
+  | 'firstName'
+  | 'middleName'
+  | 'lastName'
+  | 'address1'
+  | 'address2'
+  | 'address3'
+  | 'city'
+  | 'state'
+  | 'postalCode'
+  | 'country'
+  | 'company'
+  | 'email'
+  | 'phone'
+  | 'ssn'
+  | 'username'
+  | 'passportNumber'
+  | 'licenseNumber';
+
+/** An identity in the editor: every field, empty when unset. */
+export type IdentityDraft = Record<IdentityFieldName, string>;
+
 /**
  * The editable, decrypted form of an item. Only what the editor changes is here; everything
- * else on the server copy (card and identity details, passkeys, attachments, fields from newer
- * clients) is carried over untouched when the item is saved.
+ * else on the server copy (passkeys, attachments, SSH keys, fields from newer clients) is
+ * carried over untouched when the item is saved.
  */
 export interface ItemDraft {
   type: CipherType;
@@ -158,6 +195,8 @@ export interface ItemDraft {
     totp: string;
     uris: LoginUri[];
   } | null;
+  card: CardDraft | null;
+  identity: IdentityDraft | null;
   fields: DraftField[];
 }
 

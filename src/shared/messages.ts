@@ -48,9 +48,16 @@ export interface LoginRequest {
   challenge?: LoginChallenge;
 }
 
-/** Secrets of items with "master password re-prompt" need the password again. */
+/**
+ * Secrets of items with "master password re-prompt" need the password again, once per popup
+ * session: `session` is the popup's id, which the worker remembers after a correct password.
+ */
+/** Name prefix of the port an open popup keeps to the worker; the rest is its session id. */
+export const POPUP_PORT_PREFIX = 'vibepass-popup:';
+
 export interface RepromptFields {
   masterPassword?: string;
+  session?: string;
 }
 
 export interface FillResult {

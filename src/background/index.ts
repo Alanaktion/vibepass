@@ -27,6 +27,7 @@ import { createPasskeys } from './passkeys';
 import { AUTO_LOCK_ALARM, createAutoLock } from './autolock';
 import { CLIPBOARD_ALARM, createClipboard } from './clipboard';
 import { createHandlers } from './handlers';
+import { listenForPopups } from './reprompt';
 import { createRouter } from './router';
 import { VaultService } from './service';
 
@@ -147,6 +148,12 @@ const route = createRouter(
 // Listeners must be registered synchronously at the top level so an MV3 worker that is woken
 // by an event can receive it.
 browser.runtime.onMessage.addListener(route);
+listenForPopups(
+  browser.runtime.onConnect,
+  service.grants,
+  browser.runtime.id,
+  browser.runtime.getURL(''),
+);
 autoLock.listen();
 
 browser.runtime.onInstalled.addListener(({ reason }) => {

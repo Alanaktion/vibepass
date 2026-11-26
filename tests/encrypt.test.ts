@@ -300,6 +300,120 @@ describe.each(Object.entries(officialVaults))('round trips (%s)', (_name, fixtur
     expect(after.login).toBeUndefined();
   });
 
+  it('a new card reads back the same in the official client', async () => {
+    const draft: ItemDraft = {
+      ...newDraft(CipherType.Card),
+      name: 'Travel card',
+      reprompt: true,
+      card: {
+        cardholderName: 'Alice Example',
+        brand: 'Visa',
+        number: '4111111111111111',
+        expMonth: '4',
+        expYear: '2030',
+        code: '123',
+      },
+    };
+    const request = await encryptDraft(draft, null, null, context());
+    const view = await officialDecrypt(official, asStored(request, NEW_ID));
+    expect(view.type).toBe(CipherType.Card);
+    expect(view.reprompt).toBe(1);
+    expect(view.card).toEqual(draft.card);
+    expect(view.login).toBeUndefined();
+    const ours = await decryptCipher(asStored(request, NEW_ID), userKey);
+    expect(toDraft(ours)).toEqual(draft);
+  });
+
+  it('a new identity reads back the same in the official client', async () => {
+    const draft = newDraft(CipherType.Identity);
+    draft.name = 'Me';
+    Object.assign(draft.identity!, {
+      title: 'Dr',
+      firstName: 'Alice',
+      lastName: 'Exämple',
+      address1: '1 Main St',
+      city: 'Springfield',
+      state: 'OR',
+      postalCode: '97477',
+      country: 'US',
+      email: 'alice@example.com',
+      phone: '+1 555 0100',
+      ssn: '123-45-6789',
+      passportNumber: 'X1234567',
+      licenseNumber: 'D-42',
+    });
+    const request = await encryptDraft(draft, null, null, context());
+    const view = await officialDecrypt(official, asStored(request, NEW_ID));
+    expect(view.type).toBe(CipherType.Identity);
+    for (const [key, value] of Object.entries(draft.identity!)) {
+      expect([key, view.identity?.[key as keyof typeof view.identity] ?? '']).toEqual([key, value]);
+    }
+    const ours = await decryptCipher(asStored(request, NEW_ID), userKey);
+    expect(toDraft(ours)).toEqual(draft);
+  });
+
+  it('edits card details the official client wrote, keeping fields it does not know', async () => {
+    const base = fixture.sync.ciphers.find((c) => c.type === CipherType.Login)!;
+    const view: CipherView = await officialDecrypt(official, base);
+    view.type = asSdk(CipherType.Card);
+    delete view.login;
+    view.card = {
+      cardholderName: 'Alice Example',
+      brand: 'Visa',
+      number: '4111111111111111',
+      expMonth: '4',
+      expYear: '2030',
+      code: '123',
+    };
+    const { cipher } = await official.vault().ciphers().encrypt(view);
+    const card = structuredClone(cipher) as unknown as CipherResponse;
+    (card.card as Record<string, unknown>).futureCardField = 'keep';
+    const previous = await decryptCipher(card, userKey);
+    const draft = toDraft(previous);
+    draft.card = { ...draft.card!, expMonth: '12', expYear: '2031', code: '987', brand: '' };
+    const request = await encryptDraft(draft, card, previous, context());
+    expect((request.card as Record<string, unknown>).futureCardField).toBe('keep');
+    const after = await officialDecrypt(official, asStored(request, card.id));
+    expect(after.card).toEqual({
+      cardholderName: 'Alice Example',
+      brand: undefined,
+      number: '4111111111111111',
+      expMonth: '12',
+      expYear: '2031',
+      code: '987',
+    });
+  });
+
+  it('edits an identity the official client wrote', async () => {
+    const base = fixture.sync.ciphers.find((c) => c.type === CipherType.Login)!;
+    const view: CipherView = await officialDecrypt(official, base);
+    view.type = asSdk(CipherType.Identity);
+    delete view.login;
+    view.identity = {
+      title: 'Mx',
+      firstName: 'Sam',
+      lastName: 'Example',
+      email: 'sam@example.com',
+      ssn: '000-11-2222',
+    };
+    const { cipher } = await official.vault().ciphers().encrypt(view);
+    const identity = cipher as unknown as CipherResponse;
+    const previous = await decryptCipher(identity, userKey);
+    const draft = toDraft(previous);
+    expect(draft.identity).toMatchObject({ title: 'Mx', firstName: 'Sam', ssn: '000-11-2222' });
+    draft.identity = { ...draft.identity!, email: '', city: 'Portland' };
+    const request = await encryptDraft(draft, identity, previous, context());
+    const after = await officialDecrypt(official, asStored(request, identity.id));
+    expect(after.identity).toMatchObject({
+      title: 'Mx',
+      firstName: 'Sam',
+      lastName: 'Example',
+      city: 'Portland',
+      ssn: '000-11-2222',
+    });
+    expect(after.identity?.email ?? null).toBeNull();
+  });
+
   it('a passkey Vibepass saves reads back the same in the official client', async () => {
     const { passkey } = await createPasskey(passkeyInput());
     const base = structuredClone(fixture.sync.ciphers.find((c) => c.type === CipherType.Login)!);

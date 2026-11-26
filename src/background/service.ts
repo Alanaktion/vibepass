@@ -24,6 +24,7 @@ import {
   type SymmetricKey,
 } from '../crypto';
 import { CodedError } from '../shared/errors';
+import { RepromptGrants } from './reprompt';
 import { log } from '../shared/log';
 import type { LoginRequest, VaultStatus } from '../shared/messages';
 import type { SearchIndex } from '../search';
@@ -54,6 +55,12 @@ import {
   type PasswordHistoryEntry,
   type TrashItem,
 } from '../vault/types';
+
+/** Re-prompt answers that come with a request: the password, or the popup's session. */
+export interface RepromptAuth {
+  masterPassword?: string | undefined;
+  session?: string | undefined;
+}
 
 export interface ServiceDeps {
   createApi(serverUrl: string): ApiClient;
@@ -111,6 +118,8 @@ export interface FillData {
 export class VaultService {
   private readonly ready: Promise<void>;
   private session: UnlockedSession | null = null;
+  /** Popup sessions that already passed the master password re-prompt. */
+  readonly grants = new RepromptGrants();
   private syncing: Promise<void> | null = null;
 
   constructor(
@@ -274,6 +283,7 @@ export class VaultService {
     await this.ready;
     const wasUnlocked = this.vault.isUnlocked;
     this.vault.lock();
+    this.grants.revokeAll();
     this.search.clear();
     this.session = null;
     await this.deps.session.clear();
@@ -471,11 +481,12 @@ export class VaultService {
 
   // --- One item, on demand ----------------------------------------------------------------
 
-  /** Decrypt one item in full. Checks re-prompt when the caller is about to use a secret. */
-  private async decryptItem(
-    id: string,
-    secret: { masterPassword?: string | undefined } | null,
-  ): Promise<DecryptedCipher> {
+  /**
+   * Decrypt one item in full. Checks re-prompt when the caller is about to use a secret: a popup
+   * session that already entered the master password isn't asked again until it closes or the
+   * vault locks.
+   */
+  private async decryptItem(id: string, secret: RepromptAuth | null): Promise<DecryptedCipher> {
     await this.ready;
     const userKey = this.vault.key;
     if (!userKey) throw new CodedError('Vibepass is locked', 'locked');
@@ -483,7 +494,10 @@ export class VaultService {
     if (!raw) throw new Error('That item is no longer in your vault');
     const ownerKey = ownerKeyFor(raw, userKey, this.vault.orgKeys);
     if (!ownerKey) throw new Error('This item belongs to an organization you can no longer read');
-    if (secret && raw.reprompt === 1) await this.verifyPassword(secret.masterPassword);
+    if (secret && raw.reprompt === 1 && !this.grants.has(secret.session)) {
+      await this.verifyPassword(secret.masterPassword);
+      this.grants.grant(secret.session);
+    }
     return decryptCipher(raw, ownerKey);
   }
 
@@ -503,27 +517,27 @@ export class VaultService {
     key.fill(0);
   }
 
-  async item(id: string, masterPassword?: string): Promise<CipherDetail> {
-    const item = await this.decryptItem(id, { masterPassword });
+  async item(id: string, auth: RepromptAuth = {}): Promise<CipherDetail> {
+    const item = await this.decryptItem(id, auth);
     return toDetail(item, this.vault);
   }
 
-  async reveal(id: string, fieldId: string, masterPassword?: string): Promise<string> {
-    const item = await this.decryptItem(id, { masterPassword });
+  async reveal(id: string, fieldId: string, auth: RepromptAuth = {}): Promise<string> {
+    const item = await this.decryptItem(id, auth);
     const { value, allowed } = secretValue(item, fieldId);
     if (!allowed) throw new Error('Your organization hides this value');
     if (value === null) throw new Error('That field is empty');
     return value;
   }
 
-  async totp(id: string, masterPassword?: string): Promise<TotpCode> {
-    const item = await this.decryptItem(id, { masterPassword });
+  async totp(id: string, auth: RepromptAuth = {}): Promise<TotpCode> {
+    const item = await this.decryptItem(id, auth);
     if (!item.login?.totp) throw new Error('This item has no one-time password');
     return generateTotp(item.login.totp, this.deps.now());
   }
 
-  async fillData(id: string, masterPassword?: string): Promise<FillData> {
-    const item = await this.decryptItem(id, { masterPassword });
+  async fillData(id: string, auth: RepromptAuth = {}): Promise<FillData> {
+    const item = await this.decryptItem(id, auth);
     const totp = item.login?.totp ? await generateTotp(item.login.totp, this.deps.now()) : null;
     return { item, totp };
   }
@@ -531,9 +545,9 @@ export class VaultService {
   async attachment(
     id: string,
     attachmentId: string,
-    masterPassword?: string,
+    auth: RepromptAuth = {},
   ): Promise<{ fileName: string; base64: string }> {
-    const item = await this.decryptItem(id, { masterPassword });
+    const item = await this.decryptItem(id, auth);
     const account = this.vault.currentAccount;
     const userKey = this.vault.key;
     const raw = this.vault.raw(id);
@@ -600,8 +614,8 @@ export class VaultService {
   }
 
   /** An item, decrypted for the editor. Asks for the master password on re-prompt items. */
-  async editable(id: string, masterPassword?: string): Promise<EditableItem> {
-    const item = await this.decryptItem(id, { masterPassword });
+  async editable(id: string, auth: RepromptAuth = {}): Promise<EditableItem> {
+    const item = await this.decryptItem(id, auth);
     if (!item.canEdit) throw new Error('You can’t edit this item');
     if (item.deletedDate) throw new Error('Restore this item before editing it');
     return {
@@ -683,8 +697,8 @@ export class VaultService {
   }
 
   /** One login, decrypted, for signing with its passkey. Asks for re-prompt like a fill. */
-  passkeyLogin(id: string, masterPassword?: string): Promise<DecryptedCipher> {
-    return this.decryptItem(id, { masterPassword });
+  passkeyLogin(id: string, auth: RepromptAuth = {}): Promise<DecryptedCipher> {
+    return this.decryptItem(id, auth);
   }
 
   /**

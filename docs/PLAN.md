@@ -209,8 +209,14 @@ implementation detail; the UI, search, autofill engine, and message protocol sta
 >   restore, a sign-up page with the generated password and the save banner, and the update
 >   banner. The Phase 1 live check (19 of 19) and inline menu check (15 of 15) still pass.
 > - Not yet: self-hosted Bitwarden live (its image can't be pulled in the build environment),
->   Firefox live testing, creating organization items and changing collections, editing card,
->   identity, and SSH key fields (kept as they are on save), and running the live checks in CI.
+>   Firefox live testing, creating organization items and changing collections, editing SSH
+>   key fields (kept as they are on save), and running the live checks in CI.
+> - **Cards and identities (2026-11-26):** created and edited in the popup (the + menu offers
+>   login, note, card, identity). Round trips with Bitwarden's `CiphersClient` in
+>   `tests/encrypt.test.ts`, both directions, keeping unknown card fields. Master password
+>   re-prompt is now asked once per open popup (`src/background/reprompt.ts`).
+>   `write-check.mjs` passed 23 of 23 against Vaultwarden 1.37.5 with the new card, identity,
+>   and re-prompt steps. Not yet: autofill for payment and address forms.
 > - The editing setting stays off by default until Alan's 2-week lifecycle trial.
 
 ### Gate before any write
@@ -336,7 +342,8 @@ Prioritized from beta feedback. Candidates from the spec:
   - **Not yet:** Firefox live testing, conditional (autofill) requests and passkeys in the
     inline menu, cross-origin iframes, re-prompt items, removing a passkey in the editor,
     related origins, and a check against real sites and self-hosted Bitwarden.
-- Cards and identities, with autofill for payment and address forms.
+- Autofill for payment and address forms (cards and identities can already be created and
+  edited).
 - Biometric or passkey unlock.
 - Attachment upload.
 - Edge (likely little work beyond the Chrome build) and Safari (a larger port; decide whether to

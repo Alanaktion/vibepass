@@ -627,3 +627,42 @@ button.icon-button[aria-pressed='true'] svg {
   color: #f59f00;
   fill: currentColor;
 }
+
+.menu-anchor {
+  position: relative;
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 10;
+  min-width: 160px;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 20%);
+}
+
+.menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-start;
+  text-align: left;
+  padding: 6px 8px;
+}
+
+/* Side-by-side fields (expiration, state and postal code) share the row evenly. Fieldsets
+   default to their content's min-content width, which would push the row past the popup. */
+.form fieldset {
+  min-width: 0;
+}
+
+.form .row > .grow {
+  flex-basis: 0;
+  min-width: 0;
+}

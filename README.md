@@ -30,8 +30,10 @@ autofill, and a calm item view. Nothing to migrate.
   for that site. It asks before filling anything else, or an https login into an http page.
 - Copied secrets are cleared from the clipboard after 30 seconds, and the vault locks after 15
   minutes idle or when your computer locks. Both are in Settings (gear icon).
-- **Editing** (after turning it on in Settings): the + button starts a new login for the current
-  site. In an item, the pencil (or E) edits it and the star favorites it; the folder menu and
+- **Editing** (after turning it on in Settings): the + button starts a new login (for the current
+  site), secure note, card, or identity. Cards fill in the brand from the number; card numbers,
+  security codes, and identity documents stay masked in the editor until you show them. In an
+  item, the pencil (or E) edits it and the star favorites it; the folder menu and
   "Move to trash" are under the fields. In the editor, Ctrl+S (⌘S) saves and Escape cancels.
   If the item changed on another device since you opened it, Vibepass asks before saving over
   it. Folders and the trash (restore, or delete for good) are in Settings.
@@ -151,6 +153,9 @@ browser only where it must: Chrome uses `background.service_worker`, Firefox use
 - Remote servers require HTTPS. Local development can use HTTP on loopback. API requests reject redirects.
 - Autofill confirmation applies to the displayed origin. An address saved without a scheme defaults to HTTPS.
 - Opening a re-prompted item requires the master password. Its notes are excluded from search.
+  The password is asked once per popup: after that, the open popup can reveal, copy, fill, and
+  edit protected items until it closes or the vault locks. The grant lives in worker memory,
+  tied to the popup's open connection; the popup never keeps the password.
 - Remembered two-step tokens are encrypted. Logging out forgets the current account's token.
 - Website icons are opt-in. Enabling them sends the hostname of each displayed site to your vault server.
 - Host access to the server is requested at runtime via `optional_host_permissions`.

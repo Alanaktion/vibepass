@@ -14,6 +14,7 @@ import { QuickFind } from './components/QuickFind';
 import { SettingsView } from './components/SettingsView';
 import { SetupScreen } from './components/SetupScreen';
 import { TrashView } from './components/TrashView';
+import type { NewItemType } from '../vault/draft';
 import { CipherType } from '../vault/types';
 import { activeTab, modLabel, type ActiveTab } from './lib';
 
@@ -21,7 +22,7 @@ type View =
   | { kind: 'list' }
   | { kind: 'item'; id: string }
   | { kind: 'settings' }
-  | { kind: 'edit'; id: string | null; type: CipherType.Login | CipherType.SecureNote }
+  | { kind: 'edit'; id: string | null; type: NewItemType }
   | { kind: 'generator' }
   | { kind: 'folders' }
   | { kind: 'trash' };

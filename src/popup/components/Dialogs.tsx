@@ -61,7 +61,10 @@ export function Dialog({ request, onDone }: { request: DialogRequest; onDone: ()
             finish(password);
           }}
         >
-          <p>This item asks for your master password.</p>
+          <p>
+            This item asks for your master password. You won’t be asked again until you close
+            Vibepass or it locks.
+          </p>
           <label>
             Master password
             <input

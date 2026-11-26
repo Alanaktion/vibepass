@@ -2,7 +2,7 @@
  * The encrypt path: turn an edited item back into the server's cipher format.
  *
  * Saving starts from the server's own copy of the cipher, so every field Vibepass does not edit
- * (passkeys, attachments, card and identity details, and fields added by newer clients) is sent
+ * (passkeys, attachments, SSH keys, and fields added by newer clients) is sent
  * back exactly as it came. Only the fields in an ItemDraft are re-encrypted. Round trips with
  * the official clients' code are checked in tests/encrypt.test.ts.
  */
@@ -18,7 +18,8 @@ import {
 } from '../crypto';
 import type { DecryptedCipher } from './decrypt';
 import type { StoredPasskey } from './passkey';
-import { CipherType, FieldType, type ItemDraft } from './types';
+import { IDENTITY_FIELDS, emptyCard } from './draft';
+import { CipherType, FieldType, type IdentityDraft, type ItemDraft } from './types';
 
 /** The body of POST /api/ciphers and PUT /api/ciphers/{id}. Loosely typed on purpose. */
 export type CipherRequest = Record<string, unknown>;
@@ -168,6 +169,22 @@ export async function encryptDraft(
           ...history,
         ].slice(0, PASSWORD_HISTORY_LIMIT);
       }
+    } else if (type === CipherType.Card && draft.card) {
+      const card = draft.card;
+      const old = (base?.card ?? {}) as Record<string, unknown>;
+      request.card = {
+        ...old,
+        cardholderName: await enc(card.cardholderName),
+        brand: await enc(card.brand),
+        number: await enc(card.number),
+        expMonth: await enc(card.expMonth),
+        expYear: await enc(card.expYear),
+        code: await enc(card.code),
+      };
+    } else if (type === CipherType.Identity && draft.identity) {
+      const identity: Record<string, unknown> = { ...(base?.identity ?? {}) };
+      for (const field of IDENTITY_FIELDS) identity[field] = await enc(draft.identity[field]);
+      request.identity = identity;
     } else if (type === CipherType.SecureNote && !base) {
       request.secureNote = { type: 0 };
     }
@@ -244,6 +261,24 @@ export function toDraft(item: DecryptedCipher): ItemDraft {
         }
       : item.type === CipherType.Login
         ? { username: '', password: '', totp: '', uris: [] }
+        : null,
+    card: item.card
+      ? {
+          cardholderName: item.card.cardholderName ?? '',
+          brand: item.card.brand ?? '',
+          number: item.card.number ?? '',
+          expMonth: item.card.expMonth ?? '',
+          expYear: item.card.expYear ?? '',
+          code: item.card.code ?? '',
+        }
+      : item.type === CipherType.Card
+        ? emptyCard()
+        : null,
+    identity:
+      item.identity || item.type === CipherType.Identity
+        ? (Object.fromEntries(
+            IDENTITY_FIELDS.map((f) => [f, item.identity?.[f] ?? '']),
+          ) as IdentityDraft)
         : null,
     fields: item.fields.map((f) => ({
       name: f.name,

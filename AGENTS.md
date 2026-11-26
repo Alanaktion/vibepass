@@ -27,7 +27,7 @@ status notes current when you finish a milestone.
 | 2. Write support | Save, update, edit, generate, organize   | Built behind a setting; Alan's lifecycle trial is the gate |
 | 3. Beta          | Quality, breadth, security for others    | Inline search, form types, first site rule and corpus      |
 | 4. v1            | Chrome Web Store and Firefox Add-ons     | Onboarding and unsigned review packages built              |
-| Later            | Passkeys, cards/identities, Safari, etc. | Basic passkeys built (sign in; save with editing on)       |
+| Later            | Passkeys, cards/identities, Safari, etc. | Basic passkeys; card and identity editing (no form fill)   |
 
 Known gaps carried forward: a live check against self-hosted Bitwarden, Firefox live testing of
 autofill, editing, and passkeys, the notifications hub (sync polls instead), WebAuthn and Duo
@@ -59,6 +59,7 @@ src/
     service.ts   VaultService: owns the order of operations (login, unlock, sync, lock, writes)
     autofill.ts  Fill on gesture, and the save/update banner's decisions
     passkeys.ts  Passkey sign-in and save: origin checks, picking, signing
+    reprompt.ts  Master password re-prompt, asked once per open popup
     autolock.ts  Idle and system-lock auto-lock
     clipboard.ts Clears copied secrets after the timeout
   popup/       Preact UI: setup, lock, quick find, item view, editor, generator, folders, trash,
@@ -134,7 +135,9 @@ These are not style preferences. A change that breaks one is a bug.
   on. The inline menu gets names and usernames, never secrets.
 - Autofill happens only on a user gesture, only in the tab's top frame, and only for items saved
   for that site; anything else (mismatch, https item on an http page) asks first. Re-prompt items
-  need the master password again.
+  need the master password again, once per open popup: the worker keeps the grant in memory for
+  that popup's port only (`src/background/reprompt.ts`) and drops it on close or lock. Content
+  scripts can never hold one.
 - `no-console` is an error in `src/`. Use `log` from `src/shared/log.ts` with short static
   messages, and never pass it vault data, keys, or passwords.
 - Keep permissions minimal. Host access to the server is requested at runtime via

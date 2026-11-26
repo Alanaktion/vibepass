@@ -293,14 +293,55 @@ describe('item access', () => {
     server.sync.ciphers.find((c) => c.id === loginId)!.reprompt = 1;
     await service.login(LOGIN);
     expect(await codeOf(service.item(loginId))).toBe('reprompt-required');
-    expect((await service.item(loginId, LOGIN.masterPassword)).reprompt).toBe(true);
+    expect((await service.item(loginId, { masterPassword: LOGIN.masterPassword })).reprompt).toBe(
+      true,
+    );
     expect(await codeOf(service.reveal(loginId, 'login.password'))).toBe('reprompt-required');
-    await expect(service.reveal(loginId, 'login.password', 'wrong')).rejects.toThrow(
+    await expect(
+      service.reveal(loginId, 'login.password', { masterPassword: 'wrong' }),
+    ).rejects.toThrow('Incorrect master password');
+    expect(
+      await service.reveal(loginId, 'login.password', { masterPassword: fixture.password }),
+    ).toBe(loginItem.password);
+  });
+
+  it('asks once per popup session, until the popup closes or the vault locks', async () => {
+    const { service, server } = setup();
+    server.sync = structuredClone(fixture.sync);
+    server.sync.ciphers.find((c) => c.id === loginId)!.reprompt = 1;
+    await service.login(LOGIN);
+    const session = 'a'.repeat(32);
+    const other = 'b'.repeat(32);
+    expect(service.grants.connect(session)).toBe(true);
+    expect(service.grants.connect(other)).toBe(true);
+
+    expect(await codeOf(service.item(loginId, { session }))).toBe('reprompt-required');
+    // A wrong password grants nothing.
+    await expect(service.item(loginId, { session, masterPassword: 'wrong' })).rejects.toThrow(
       'Incorrect master password',
     );
-    expect(await service.reveal(loginId, 'login.password', fixture.password)).toBe(
-      loginItem.password,
+    expect(await codeOf(service.reveal(loginId, 'login.password', { session }))).toBe(
+      'reprompt-required',
     );
+    await service.item(loginId, { session, masterPassword: fixture.password });
+    // The same popup isn't asked again, for any protected action.
+    expect(await service.reveal(loginId, 'login.password', { session })).toBe(loginItem.password);
+    expect((await service.editable(loginId, { session })).draft.reprompt).toBe(true);
+    expect((await service.totp(loginId, { session })).code).toMatch(/^\d{6}$/);
+    // Another popup, or no popup, still is.
+    expect(await codeOf(service.item(loginId, { session: other }))).toBe('reprompt-required');
+    expect(await codeOf(service.item(loginId))).toBe('reprompt-required');
+
+    // Locking ends the grant, even for a popup that stays open.
+    await service.lock();
+    await service.unlock(fixture.password);
+    expect(await codeOf(service.item(loginId, { session }))).toBe('reprompt-required');
+    await service.item(loginId, { session, masterPassword: fixture.password });
+    // Closing the popup ends it too, and a closed session can't be granted again.
+    service.grants.disconnect(session);
+    expect(await codeOf(service.item(loginId, { session }))).toBe('reprompt-required');
+    await service.item(loginId, { session, masterPassword: fixture.password });
+    expect(await codeOf(service.item(loginId, { session }))).toBe('reprompt-required');
   });
 
   it('refuses item access while locked', async () => {
