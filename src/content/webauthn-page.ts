@@ -126,9 +126,19 @@ function ask(
   });
 }
 
+/**
+ * Own properties, writable like the browser's own (which live on the prototype): libraries
+ * such as @github/webauthn-json assign `credential.toJSON = ...`, which throws in strict code
+ * if the property is read-only.
+ */
 function define(target: object, values: Record<string, unknown>): void {
   for (const [key, value] of Object.entries(values)) {
-    Object.defineProperty(target, key, { value, enumerable: true, configurable: true });
+    Object.defineProperty(target, key, {
+      value,
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
   }
 }
 

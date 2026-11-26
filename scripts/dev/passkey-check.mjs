@@ -179,6 +179,8 @@ async function signin() {
   const challenge = rand();
   try {
     const cred = await navigator.credentials.get({ publicKey: { challenge, rpId: 'localhost', userVerification: 'required' } });
+    // Like @github/webauthn-json (GitHub's sign-in), which replaces toJSON on the credential.
+    (() => { 'use strict'; const own = cred.toJSON; cred.toJSON = () => own.call(cred); })();
     const known = store.find((c) => c.id === cred.id);
     if (!known) return done({ error: 'unknown credential', id: cred.id });
     const key = await crypto.subtle.importKey('spki', unb64(known.key), { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
