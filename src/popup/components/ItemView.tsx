@@ -4,6 +4,7 @@ import {
   Download,
   Eye,
   EyeOff,
+  Folder as FolderIcon,
   Pencil,
   RotateCcw,
   Star,
@@ -93,24 +94,14 @@ export function ItemView({ id, onBack, onEdit }: Props) {
         )}
         <h1 class="grow title">{item?.name ?? ''}</h1>
         {item && writable && (
-          <>
-            <IconButton
-              icon={Star}
-              label={item.favorite ? 'Remove from favorites' : 'Add to favorites'}
-              aria-pressed={item.favorite}
-              onClick={() => {
-                void organize(ctx, item.id, { favorite: !item.favorite });
-              }}
-            />
-            <IconButton
-              icon={Pencil}
-              label="Edit"
-              title="Edit (E)"
-              onClick={() => {
-                onEdit(item.id);
-              }}
-            />
-          </>
+          <IconButton
+            icon={Pencil}
+            label="Edit"
+            title="Edit (E)"
+            onClick={() => {
+              onEdit(item.id);
+            }}
+          />
         )}
         {item && canFill && !item.deletedDate && (
           <button
@@ -167,10 +158,19 @@ function Organize({
   }, [ctx.status.version]);
 
   return (
-    <div class="row organize">
+    <footer class="row bottombar organize">
+      <IconButton
+        icon={Star}
+        label={item.favorite ? 'Remove from favorites' : 'Add to favorites'}
+        aria-pressed={item.favorite}
+        onClick={() => {
+          void organize(ctx, item.id, { favorite: !item.favorite });
+        }}
+      />
       <label class="grow inline">
-        <span class="muted small">Folder</span>
+        <FolderIcon size={14} class="muted" aria-hidden="true" />
         <select
+          aria-label="Folder"
           value={item.folderId ?? ''}
           onChange={(e) => {
             const folderId = e.currentTarget.value || null;
@@ -187,9 +187,9 @@ function Organize({
           ))}
         </select>
       </label>
-      <button
-        type="button"
-        class="ghost danger"
+      <IconButton
+        icon={Trash2}
+        label="Move to trash"
         onClick={() => {
           void ctx
             .confirm(
@@ -207,10 +207,8 @@ function Organize({
               }
             });
         }}
-      >
-        <Trash2 size={14} aria-hidden="true" /> Move to trash
-      </button>
-    </div>
+      />
+    </footer>
   );
 }
 
@@ -295,7 +293,7 @@ function Detail({ item, ctx }: { item: CipherDetail; ctx: PopupContext }) {
             return (
               <div class="field" key={`${uri.uri}-${String(i)}`}>
                 {parsed ? (
-                  <a href={parsed.href} target="_blank" rel="noopener noreferrer">
+                  <a href={parsed.href} title={uri.uri} target="_blank" rel="noopener noreferrer">
                     {uri.uri}
                   </a>
                 ) : (

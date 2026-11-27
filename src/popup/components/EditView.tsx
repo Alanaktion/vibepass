@@ -361,7 +361,7 @@ export function EditView({ id, type, onSaved, onCancel }: Props) {
           <label>
             Notes
             <textarea
-              rows={4}
+              rows={3}
               value={draft.notes}
               onInput={(e) => {
                 const notes = e.currentTarget.value;

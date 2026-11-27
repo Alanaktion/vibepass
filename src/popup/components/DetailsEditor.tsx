@@ -208,9 +208,10 @@ export function IdentityFields({
   identity: IdentityDraft;
   onChange: (patch: Partial<IdentityDraft>) => void;
 }) {
-  const text = (key: IdentityFieldName, label: string, type?: 'email' | 'tel') => (
+  const text = (key: IdentityFieldName, label: string, type?: 'email' | 'tel', grow = false) => (
     <TextField
       label={label}
+      {...(grow ? { class: 'grow' } : {})}
       value={identity[key]}
       {...(type ? { type } : {})}
       onValue={(value) => {
@@ -234,40 +235,51 @@ export function IdentityFields({
     <>
       <fieldset>
         <legend>Personal</legend>
-        <div class="labelled">
-          <label for="edit-identity-title">Title</label>
-          <select
-            id="edit-identity-title"
-            value={identity.title}
-            onChange={(e) => {
-              onChange({ title: e.currentTarget.value });
-            }}
-          >
-            <option value="">None</option>
-            {titles.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
+        <div class="row">
+          <div class="labelled narrow">
+            <label for="edit-identity-title">Title</label>
+            <select
+              id="edit-identity-title"
+              value={identity.title}
+              onChange={(e) => {
+                onChange({ title: e.currentTarget.value });
+              }}
+            >
+              <option value="">None</option>
+              {titles.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </div>
+          {text('firstName', 'First name', undefined, true)}
         </div>
-        {text('firstName', 'First name')}
-        {text('middleName', 'Middle name')}
-        {text('lastName', 'Last name')}
-        {text('username', 'Username')}
-        {text('company', 'Company')}
+        <div class="row">
+          {text('middleName', 'Middle name', undefined, true)}
+          {text('lastName', 'Last name', undefined, true)}
+        </div>
+        <div class="row">
+          {text('username', 'Username', undefined, true)}
+          {text('company', 'Company', undefined, true)}
+        </div>
       </fieldset>
       <fieldset>
         <legend>Contact</legend>
-        {text('email', 'Email', 'email')}
-        {text('phone', 'Phone', 'tel')}
+        <div class="row">
+          {text('email', 'Email', 'email', true)}
+          {text('phone', 'Phone', 'tel', true)}
+        </div>
       </fieldset>
       <fieldset>
         <legend>Address</legend>
         {text('address1', 'Address line 1')}
         {text('address2', 'Address line 2')}
         {text('address3', 'Address line 3')}
-        {text('city', 'City or town')}
+        <div class="row">
+          {text('city', 'City or town', undefined, true)}
+          {text('country', 'Country', undefined, true)}
+        </div>
         <div class="row">
           <TextField
             class="grow"
@@ -286,7 +298,6 @@ export function IdentityFields({
             }}
           />
         </div>
-        {text('country', 'Country')}
       </fieldset>
       <fieldset>
         <legend>Documents</legend>

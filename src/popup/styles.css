@@ -12,7 +12,7 @@
     -apple-system,
     'Segoe UI',
     sans-serif;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -31,28 +31,74 @@
   box-sizing: border-box;
 }
 
+/* The popup has a fixed size, and each screen scrolls inside it. When the document itself
+   scrolled, the vertical scrollbar took its width out of the fixed 360px body and every
+   screen taller than the popup grew a horizontal scrollbar too. */
+html,
+body {
+  height: 580px;
+  overflow: hidden;
+}
+
 body {
   margin: 0;
   width: 360px;
-  min-height: 420px;
   background: var(--bg);
   color: var(--fg);
+  line-height: 1.35;
+}
+
+#app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 h1 {
-  font-size: 1.4rem;
+  font-size: 1.25rem;
   margin: 0 0 4px;
 }
 
 .screen {
-  padding: 16px;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+/* Top and bottom bars stay put while the screen scrolls between them. */
+.screen > header {
+  position: sticky;
+  top: -12px;
+  z-index: 5;
+  flex: none;
+  margin: -12px -12px 0;
+  padding: 10px 12px 8px;
+  background: var(--bg);
+}
+
+.bottombar {
+  position: sticky;
+  bottom: -12px;
+  z-index: 5;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  margin: auto -12px -12px;
+  padding: 5px 8px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
 }
 
 .stack {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  margin-top: 16px;
+  gap: 10px;
+  margin-top: 12px;
 }
 
 .row {
@@ -82,7 +128,7 @@ label {
 input,
 button {
   font: inherit;
-  padding: 8px 10px;
+  padding: 6px 8px;
   border-radius: 6px;
   border: 1px solid var(--border);
   background: transparent;
@@ -109,20 +155,60 @@ button:disabled {
   margin: 0;
 }
 
+/* Quick find scrolls only its results, so the search box and bottom bar never move. */
+.screen.quick {
+  overflow: hidden;
+}
+
+.search-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--muted);
+}
+
+.search-field:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.search-field input {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 0;
+  border: none;
+  outline: none;
+  color: var(--fg);
+}
+
+.search-field input::-webkit-search-cancel-button {
+  display: none;
+}
+
 .results {
+  flex: 1;
+  min-height: 0;
   list-style: none;
-  margin: 8px -8px 0;
-  padding: 0;
-  max-height: 440px;
+  margin: 0 -8px;
+  padding: 0 4px 4px;
   overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.results:empty {
+  display: none;
 }
 
 .results li[role='option'] {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 7px 8px;
-  border-radius: 8px;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 6px;
   cursor: pointer;
 }
 
@@ -131,8 +217,8 @@ button:disabled {
 }
 
 .results li.group {
-  padding: 10px 8px 4px;
-  font-size: 0.78rem;
+  padding: 8px 6px 2px;
+  font-size: 0.72rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -152,6 +238,10 @@ button:disabled {
   white-space: nowrap;
 }
 
+.results .text > .muted {
+  font-size: 0.92em;
+}
+
 .name {
   font-weight: 600;
 }
@@ -165,8 +255,8 @@ button:disabled {
 
 .icon {
   flex: none;
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   border-radius: 5px;
   object-fit: contain;
 }
@@ -182,8 +272,8 @@ button:disabled {
 }
 
 .item-header .icon {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
 }
 
 button.primary,
@@ -195,8 +285,8 @@ button.fill {
 
 button.fill {
   flex: none;
-  min-height: 28px;
-  padding: 4px 10px;
+  min-height: 26px;
+  padding: 3px 10px;
   font-size: 0.9em;
   cursor: pointer;
 }
@@ -250,6 +340,10 @@ button.link {
 }
 
 .hints {
+  min-width: 0;
+  padding: 0 4px;
+  font-size: 0.85em;
+  text-align: center;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -269,16 +363,24 @@ button.link {
 
 .item-header {
   align-items: center;
+  gap: 6px;
 }
 
 .title {
-  font-size: 1.35rem;
+  font-size: 1.15rem;
   margin: 0;
-  overflow-wrap: anywhere;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .detail {
-  margin-top: 8px;
+  margin-top: 2px;
+}
+
+.detail > p {
+  margin-bottom: 2px;
 }
 
 .location,
@@ -287,28 +389,35 @@ button.link {
 }
 
 .fields {
-  margin-top: 14px;
+  margin-top: 8px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 8px;
   overflow: hidden;
 }
 
 .fields h2 {
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--muted);
   margin: 0;
-  padding: 8px 12px 0;
+  padding: 6px 10px 0;
 }
 
 .field {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  column-gap: 8px;
-  padding: 8px 12px;
+  column-gap: 6px;
+  padding: 4px 6px 4px 10px;
+  min-height: 34px;
+}
+
+/* Copy and reveal sit beside both the label and the value, not on a row of their own. */
+.field .actions {
+  grid-column: 2;
+  grid-row: 1 / span 2;
 }
 
 .field + .field {
@@ -316,14 +425,21 @@ button.link {
 }
 
 .field .label {
-  grid-column: 1 / -1;
-  font-size: 0.8em;
+  grid-column: 1;
+  font-size: 0.78em;
   color: var(--muted);
 }
 
 .field .value {
   overflow-wrap: anywhere;
-  font-size: 1rem;
+  font-size: 0.95rem;
+}
+
+/* Websites: one line each, with the full address on hover. */
+.field a {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .field .value.concealed,
@@ -332,7 +448,7 @@ button.link {
 }
 
 .field .value.code {
-  font-size: 1.3rem;
+  font-size: 1.2rem;
   letter-spacing: 0.08em;
 }
 
@@ -361,14 +477,13 @@ button.link {
 
 .field a {
   color: var(--accent);
-  overflow-wrap: anywhere;
 }
 
 .notes {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   margin: 0;
-  padding: 6px 12px 10px;
+  padding: 4px 10px 8px;
 }
 
 .countdown {
@@ -401,7 +516,7 @@ button.link {
 }
 
 .updated {
-  margin-top: 12px;
+  margin: 8px 0;
   font-size: 0.8em;
 }
 
@@ -426,13 +541,14 @@ select {
 }
 
 .account {
-  margin-top: 20px;
+  margin-top: 16px;
   padding-top: 12px;
   border-top: 1px solid var(--border);
 }
 
 .dialog-backdrop {
   position: fixed;
+  z-index: 20;
   inset: 0;
   background: rgb(0 0 0 / 35%);
   display: flex;
@@ -456,7 +572,8 @@ select {
 .toast {
   position: fixed;
   left: 50%;
-  bottom: 12px;
+  bottom: 48px;
+  z-index: 20;
   transform: translateX(-50%);
   background: var(--fg);
   color: var(--bg);
@@ -471,7 +588,7 @@ select {
 
 textarea {
   font: inherit;
-  padding: 8px 10px;
+  padding: 6px 8px;
   border-radius: 6px;
   border: 1px solid var(--border);
   background: transparent;
@@ -484,7 +601,27 @@ textarea {
 }
 
 .form {
-  margin-top: 12px;
+  margin-top: 4px;
+}
+
+/* Form labels sit small above their inputs, so more of the form fits on screen. */
+.form label:not(.check, .inline) {
+  font-size: 0.85em;
+  color: var(--muted);
+}
+
+.form label:not(.check, .inline) > :is(input, select, textarea) {
+  font-size: 1rem;
+  color: var(--fg);
+}
+
+.form .row > .narrow {
+  flex: 0 0 76px;
+  min-width: 0;
+}
+
+.form .check {
+  font-size: 0.95em;
 }
 
 .form input:not([type='checkbox'], [type='radio'], [type='range']),
@@ -511,16 +648,16 @@ textarea {
 
 fieldset {
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 8px;
   margin: 0;
-  padding: 6px 10px 8px;
+  padding: 4px 8px 8px;
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
 legend {
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -555,9 +692,22 @@ button.danger {
   gap: 6px;
 }
 
-.organize {
-  align-items: flex-end;
-  margin-top: 14px;
+.organize select {
+  flex: 0 1 auto;
+  min-width: 0;
+  padding: 3px 6px;
+  border-color: transparent;
+}
+
+.organize select:hover,
+.organize select:focus-visible {
+  border-color: var(--border);
+}
+
+.organize label.inline {
+  min-width: 0;
+  gap: 4px;
+  padding-inline-start: 6px;
 }
 
 label.inline {
@@ -584,10 +734,10 @@ label.inline {
   display: flex;
   align-items: center;
   gap: 4px;
-  margin-top: 12px;
-  padding: 10px 12px;
+  margin-top: 8px;
+  padding: 8px 10px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 8px;
 }
 
 .generated output {

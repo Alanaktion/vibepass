@@ -1,4 +1,4 @@
-import { KeyRound, Lock, RefreshCw, Settings, Star } from 'lucide-preact';
+import { KeyRound, Lock, RefreshCw, Search, Settings, Star } from 'lucide-preact';
 import { Fragment } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { sendMessage } from '../../shared/messaging';
@@ -114,30 +114,23 @@ export function QuickFind({ onOpen, onSettings, onNew, onGenerator, query, onQue
   return (
     <main class="screen quick">
       <header class="row search-bar">
-        <input
-          type="search"
-          class="grow"
-          placeholder="Search vault"
-          aria-label="Search vault"
-          aria-controls="results"
-          aria-activedescendant={current ? `item-${current.id}` : undefined}
-          value={query}
-          onInput={(e) => {
-            onQuery(e.currentTarget.value);
-          }}
-          onKeyDown={onKeyDown}
-          autoFocus
-        />
+        <div class="search-field grow">
+          <Search size={14} aria-hidden="true" />
+          <input
+            type="search"
+            placeholder="Search vault"
+            aria-label="Search vault"
+            aria-controls="results"
+            aria-activedescendant={current ? `item-${current.id}` : undefined}
+            value={query}
+            onInput={(e) => {
+              onQuery(e.currentTarget.value);
+            }}
+            onKeyDown={onKeyDown}
+            autoFocus
+          />
+        </div>
         {settings?.allowEdits && <NewItemMenu onNew={onNew} />}
-        <IconButton icon={KeyRound} label="Password generator" onClick={onGenerator} />
-        <IconButton icon={Settings} label="Settings" onClick={onSettings} />
-        <IconButton
-          icon={Lock}
-          label="Lock"
-          onClick={() => {
-            void sendMessage('vault:lock').then(ctx.onStatus);
-          }}
-        />
       </header>
       {status.syncError && (
         <p role="alert" class="banner error">
@@ -249,10 +242,8 @@ export function QuickFind({ onOpen, onSettings, onNew, onGenerator, query, onQue
           )}
         </div>
       )}
-      <footer class="row footer muted">
-        <span class="grow hints">
-          ↵ fill · ⇧↵ open · {mod}C user · {mod}⇧C password
-        </span>
+      <footer class="row bottombar">
+        <IconButton icon={KeyRound} label="Password generator" onClick={onGenerator} />
         <IconButton
           icon={RefreshCw}
           label="Sync"
@@ -265,6 +256,20 @@ export function QuickFind({ onOpen, onSettings, onNew, onGenerator, query, onQue
             sendMessage('vault:sync').then(ctx.onStatus, (e: unknown) => {
               ctx.toast(e instanceof Error ? e.message : 'Sync failed');
             });
+          }}
+        />
+        <span
+          class="grow hints muted"
+          title={`Enter fills · Shift+Enter opens · ${mod}C copies the username · ${mod}Shift+C the password · ${mod}Alt+C the one-time password`}
+        >
+          ↵ fill · ⇧↵ open · {mod}C copy
+        </span>
+        <IconButton icon={Settings} label="Settings" onClick={onSettings} />
+        <IconButton
+          icon={Lock}
+          label="Lock"
+          onClick={() => {
+            void sendMessage('vault:lock').then(ctx.onStatus);
           }}
         />
       </footer>

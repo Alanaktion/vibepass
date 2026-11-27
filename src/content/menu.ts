@@ -26,9 +26,10 @@ const STYLE = `
 :host { all: initial; }
 .menu {
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
   max-height: ${String(MENU_MAX_HEIGHT)}px;
-  overflow-y: auto;
-  padding: 4px;
+  overflow: hidden;
   border-radius: 10px;
   border: 1px solid rgba(0, 0, 0, 0.12);
   background: #fff;
@@ -36,26 +37,99 @@ const STYLE = `
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
   font: 13px/1.3 system-ui, -apple-system, "Segoe UI", sans-serif;
 }
+.head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  color: #6b6b70;
+}
+.head svg { flex: none; }
+.head input {
+  all: unset;
+  flex: 1;
+  min-width: 0;
+  padding: 8px 0;
+  color: #1c1c1e;
+  font: inherit;
+}
+.head input::placeholder { color: #8e8e93; }
+.head input::-webkit-search-cancel-button { display: none; }
+.brand { flex: none; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; }
+.head.plain { padding: 6px 10px 4px; border-bottom: 0; }
+.head [hidden] { display: none; }
+.list { overflow-y: auto; padding: 4px; scrollbar-width: thin; }
 .row {
   display: flex;
-  flex-direction: column;
-  gap: 1px;
-  padding: 7px 10px;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
   border-radius: 6px;
   cursor: pointer;
   user-select: none;
 }
 .row[aria-selected="true"] { background: #e8f0fe; }
+.avatar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  background: #e5e9fb;
+  color: #3b5bdb;
+  font-weight: 700;
+  font-size: 11px;
+}
+.text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sub { color: #6b6b70; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.message { padding: 7px 10px; color: #6b6b70; }
-.brand { padding: 4px 10px 2px; color: #6b6b70; font-size: 11px; letter-spacing: 0.02em; }
+.message { padding: 6px; color: #6b6b70; }
 @media (prefers-color-scheme: dark) {
   .menu { background: #2c2c2e; color: #f2f2f7; border-color: rgba(255, 255, 255, 0.14); }
+  .head { border-color: rgba(255, 255, 255, 0.1); }
+  .head input { color: #f2f2f7; }
   .row[aria-selected="true"] { background: #3a3f4b; }
-  .sub, .message, .brand { color: #a1a1a6; }
+  .avatar { background: #3a3f5c; color: #a5b4fc; }
+  .head, .sub, .message { color: #a1a1a6; }
 }
 `;
+
+/** Lucide's "search" glyph, built as DOM so the content script needs no icon library. */
+function searchIcon(): SVGSVGElement {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  for (const [name, value] of Object.entries({
+    width: '14',
+    height: '14',
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    'stroke-width': '2',
+    'stroke-linecap': 'round',
+    'aria-hidden': 'true',
+  })) {
+    svg.setAttribute(name, value);
+  }
+  const handle = document.createElementNS(ns, 'path');
+  handle.setAttribute('d', 'm21 21-4.34-4.34');
+  const lens = document.createElementNS(ns, 'circle');
+  lens.setAttribute('cx', '11');
+  lens.setAttribute('cy', '11');
+  lens.setAttribute('r', '8');
+  svg.append(handle, lens);
+  return svg;
+}
+
+/** The letter badge beside a row; the arrow and spark mark the unlock and generate rows. */
+function avatar(row: MenuRow): string {
+  if (row.kind === 'unlock') return '\u2192';
+  if (row.kind === 'generate') return '\u2726';
+  if (row.kind === 'item') return (row.item.name.trim()[0] ?? '?').toUpperCase();
+  return '';
+}
 
 function rowLabel(row: MenuRow): { name: string; sub: string | null } {
   if (row.kind === 'unlock') return { name: 'Unlock Vibepass', sub: 'to fill a login here' };
@@ -74,6 +148,7 @@ export class InlineMenu {
   private host: HTMLElement | null = null;
   private list: HTMLElement | null = null;
   private search: HTMLInputElement | null = null;
+  private head: HTMLElement | null = null;
   private allRows: MenuRow[] = [];
   private announcement: HTMLElement | null = null;
   private rows: MenuRow[] = [];
@@ -96,9 +171,13 @@ export class InlineMenu {
     this.anchor = anchor;
     this.allRows = rows;
     if (!this.host) this.mount();
-    if (this.search) {
-      this.search.hidden = !rows.some((row) => row.kind === 'item');
-      if (this.search.hidden) this.search.value = '';
+    if (this.search && this.head) {
+      // Search only makes sense over logins; an unlock or generate row gets a plain header.
+      const searchable = rows.some((row) => row.kind === 'item');
+      this.search.hidden = !searchable;
+      if (!searchable) this.search.value = '';
+      this.head.classList.toggle('plain', !searchable);
+      this.head.querySelector('svg')?.toggleAttribute('hidden', !searchable);
     }
     this.filter();
     this.reposition();
@@ -115,6 +194,7 @@ export class InlineMenu {
     this.list = null;
     this.announcement = null;
     this.search = null;
+    this.head = null;
     this.allRows = [];
     this.rows = [];
     this.active = -1;
@@ -190,13 +270,16 @@ export class InlineMenu {
     const root = host.attachShadow({ mode: 'closed' });
     const style = document.createElement('style');
     style.textContent = STYLE;
+    const panel = document.createElement('div');
+    panel.className = 'menu';
     const list = document.createElement('div');
-    list.className = 'menu';
+    list.className = 'list';
     list.setAttribute('role', 'listbox');
     list.setAttribute('aria-label', 'Vibepass logins');
     // Keep focus in the page's field, so typing and Tab still work there.
-    list.addEventListener('mousedown', (event) => {
-      event.preventDefault();
+    panel.addEventListener('mousedown', (event) => {
+      // The search box takes focus normally; everything else leaves it in the page's field.
+      if (event.target !== this.search) event.preventDefault();
     });
     list.addEventListener('click', (event) => {
       if (!event.isTrusted) return;
@@ -214,10 +297,17 @@ export class InlineMenu {
     this.announcement = status;
     const search = document.createElement('input');
     search.type = 'search';
-    search.placeholder = 'Search these logins';
-    search.setAttribute('aria-label', search.placeholder);
+    search.placeholder = 'Search logins';
+    search.setAttribute('aria-label', 'Search these logins');
     search.autocomplete = 'off';
-    search.style.cssText = 'box-sizing:border-box;width:100%;font:13px system-ui;padding:5px 10px';
+    search.spellcheck = false;
+    const head = document.createElement('div');
+    head.className = 'head';
+    const brand = document.createElement('span');
+    brand.className = 'brand';
+    brand.textContent = 'Vibepass';
+    head.append(searchIcon(), search, brand);
+    this.head = head;
     search.addEventListener('input', () => {
       this.filter();
     });
@@ -236,7 +326,8 @@ export class InlineMenu {
       if (event.relatedTarget !== this.anchor) this.close();
     });
     this.search = search;
-    root.append(style, list, search, status);
+    panel.append(head, list);
+    root.append(style, panel, status);
     document.documentElement.append(host);
     // Older browsers lack the popover API even though the DOM types always declare it.
     const popover = host as Partial<Pick<HTMLElement, 'showPopover'>>;
@@ -269,10 +360,6 @@ export class InlineMenu {
     if (this.announcement && this.announcement.textContent !== spoken)
       this.announcement.textContent = spoken;
     list.replaceChildren();
-    const brand = document.createElement('div');
-    brand.className = 'brand';
-    brand.textContent = 'Vibepass';
-    list.append(brand);
     let index = 0;
     for (const row of this.rows) {
       const { name, sub } = rowLabel(row);
@@ -288,16 +375,23 @@ export class InlineMenu {
       el.setAttribute('role', 'option');
       el.setAttribute('data-index', String(index));
       el.setAttribute('aria-selected', String(index === this.active));
+      const badge = document.createElement('span');
+      badge.className = 'avatar';
+      badge.setAttribute('aria-hidden', 'true');
+      badge.textContent = avatar(row);
+      const text = document.createElement('span');
+      text.className = 'text';
       const nameEl = document.createElement('span');
       nameEl.className = 'name';
       nameEl.textContent = name;
-      el.append(nameEl);
+      text.append(nameEl);
       if (sub) {
         const subEl = document.createElement('span');
         subEl.className = 'sub';
         subEl.textContent = sub;
-        el.append(subEl);
+        text.append(subEl);
       }
+      el.append(badge, text);
       el.addEventListener('mousemove', () => {
         const at = Number(el.getAttribute('data-index'));
         if (at !== this.active) {
