@@ -13,6 +13,7 @@ it.each(pages)('detects the sanitized form at $url', (page) => {
   const fields = detectLoginFields();
   expect(fields.username?.id ?? null).toBe(page.username);
   expect(fields.password?.id ?? null).toBe(page.password);
+  expect(fields.totp?.id ?? null).toBe('totp' in page ? page.totp : null);
   const fresh = Array.from(document.querySelectorAll('input')).filter(isNewPasswordField);
   expect(fresh.map((input) => input.id)).toEqual(page.newPassword ? [page.newPassword] : []);
   if (fresh[0]) {

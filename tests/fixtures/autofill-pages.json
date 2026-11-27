@@ -19,5 +19,20 @@
     "username": "email",
     "password": null,
     "newPassword": "password"
+  },
+  {
+    "url": "https://onedrive.live.com/login",
+    "html": "<form><input type='email' class='form-control' id='emailTextInput' placeholder='Email or phone, including Gmail and iCloud' aria-required='true' spellcheck='false' autocomplete='off' title='Email or phone, including Gmail and iCloud'><button type='submit'>Next</button></form>",
+    "username": "emailTextInput",
+    "password": null,
+    "newPassword": null
+  },
+  {
+    "url": "https://login.live.com/ppsecure/post.srf",
+    "html": "<form><span class='fui-Input'><span class='fui-Input__contentBefore'><label for='floatingLabelInput5' class='fui-Label'>Code</label></span><input type='text' placeholder='' id='floatingLabelInput5' aria-describedby='field-6__validationMessage' class='fui-Input__input' value=''></span><button type='submit'>Next</button></form>",
+    "username": null,
+    "password": null,
+    "newPassword": null,
+    "totp": "floatingLabelInput5"
   }
 ]

@@ -121,12 +121,23 @@ export function restoreBrowserAutocomplete(input: HTMLInputElement): void {
   else input.setAttribute('autocomplete', original);
 }
 
+/**
+ * A field whose visible name is only "Code" (Microsoft's sign-in, which has no other hint).
+ * Matched against each name on its own, so "Promo code" or "Postal code" never count.
+ */
+const BARE_CODE = /^\s*(enter\s+(the\s+|your\s+)?)?code\s*:?\s*$/i;
+
+function visibleNames(input: HTMLInputElement): string[] {
+  const labels = input.labels ? Array.from(input.labels, (l) => l.textContent) : [];
+  return [...labels, input.placeholder, input.getAttribute('aria-label') ?? ''];
+}
+
 export function isTotpField(input: HTMLInputElement): boolean {
   if (!TEXT_TYPES.has(input.type) && input.type !== 'number') return false;
   if (autocomplete(input).includes('one-time-code')) return true;
   const maxLength = input.maxLength;
   if (maxLength > 0 && (maxLength < 4 || maxLength > 10)) return false;
-  return TOTP_HINT.test(hints(input));
+  return TOTP_HINT.test(hints(input)) || visibleNames(input).some((n) => BARE_CODE.test(n));
 }
 
 function isUsernameCandidate(input: HTMLInputElement): boolean {

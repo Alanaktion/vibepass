@@ -25,6 +25,17 @@ describe('login form detection', () => {
     expect(fields.totp).toBeNull();
   });
 
+  it('takes a field named only "Code" as the one-time code, but not promo or postal codes', () => {
+    page(`<label for="c">Code</label><input type="text" id="c">`);
+    expect(detectLoginFields().totp?.id).toBe('c');
+    page(`<label for="c">Enter your code</label><input type="text" id="c">`);
+    expect(detectLoginFields().totp?.id).toBe('c');
+    page(`<label for="c">Promo code</label><input type="text" id="c">`);
+    expect(detectLoginFields().totp).toBeNull();
+    page(`<input type="text" id="c" placeholder="Postal code">`);
+    expect(detectLoginFields().totp).toBeNull();
+  });
+
   it('prefers autocomplete hints, and skips new-password fields', () => {
     page(`
       <form>
