@@ -182,10 +182,14 @@ describe('inline menu', () => {
 
   it('offers to unlock only on clear login fields, not on any email box', async () => {
     const content = await import('../src/content/index');
-    page('<form><input id="e" type="email" name="newsletter"></form>');
+    page('<form><input id="e" type="email" name="email"></form>');
     const email = document.getElementById('e') as HTMLInputElement;
     expect(content.menuRows({ state: 'locked' }, email)).toEqual([]);
     expect(content.menuRows({ state: 'unlocked', items: [ITEM] }, email)).toHaveLength(1);
+    // A newsletter box is no login at all (Bitwarden's non-login keywords).
+    page('<form><input id="n" type="email" name="newsletter"></form>');
+    const newsletter = document.getElementById('n') as HTMLInputElement;
+    expect(content.menuRows({ state: 'unlocked', items: [ITEM] }, newsletter)).toEqual([]);
     page('<form><input id="u" type="email" autocomplete="username"></form>');
     const user = document.getElementById('u') as HTMLInputElement;
     expect(content.menuRows({ state: 'locked' }, user)).toEqual([{ kind: 'unlock' }]);

@@ -52,6 +52,11 @@ function parseSaved(value: string): ParsedPage | null {
   return parsed;
 }
 
+/** Registrable domain of a saved URI, or null when it isn't a web address. */
+export function savedDomain(value: string): string | null {
+  return parseSaved(value)?.domain ?? null;
+}
+
 /** Forget cached URIs (on lock, so no decrypted URI outlives the vault in memory). */
 export function clearMatchCache(): void {
   savedCache.clear();

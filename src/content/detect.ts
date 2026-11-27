@@ -4,7 +4,25 @@
  * and split logins (username and password in separate forms).
  */
 
-import siteRules from './site-rules.json';
+import {
+  fieldAutocomplete as autocomplete,
+  restoreBrowserAutocomplete,
+  suppressBrowserAutocomplete,
+} from './autocomplete';
+import {
+  hasAccountCreationKeyword,
+  hasLoginHeading,
+  hasNewEmailKeyword,
+  hasTotpKeyword,
+  hasUsernameKeyword,
+  isAmbiguousFieldNonLogin,
+  isIgnoredField,
+  isLikePasswordField,
+  isNonLoginForm,
+  isRecoveryCodeField,
+} from './fields';
+
+export { restoreBrowserAutocomplete, suppressBrowserAutocomplete };
 
 export interface LoginFields {
   username: HTMLInputElement | null;
@@ -80,45 +98,24 @@ export function isUsable(input: HTMLInputElement): boolean {
   return true;
 }
 
-/**
- * The page's own autocomplete value, from before the inline menu turned the browser's form
- * history off on that field, so detection sees what the page meant.
- */
-const originalAutocomplete = new WeakMap<HTMLInputElement, string | null>();
-
-function autocomplete(input: HTMLInputElement): string {
-  const original = originalAutocomplete.has(input)
-    ? originalAutocomplete.get(input)
-    : input.getAttribute('autocomplete');
-  const hint = (original ?? '').toLowerCase();
-  if (hint && hint !== 'off' && hint !== 'none') return hint;
-  const { origin, pathname } = input.ownerDocument.location;
-  return (
-    siteRules.find(
-      (rule) => rule.origin === origin && rule.path === pathname && input.matches(rule.selector),
-    )?.autocomplete ?? hint
-  );
-}
-
-/** A field's autocomplete value as the page set it, lowercased. */
+/** A field's autocomplete value as detection reads it (site map role, else the page's), lowercased. */
 export function fieldAutocomplete(input: HTMLInputElement): string {
   return autocomplete(input);
 }
 
-/** Hide the browser's own form-history dropdown on a field while the inline menu is open. */
-export function suppressBrowserAutocomplete(input: HTMLInputElement): void {
-  if (originalAutocomplete.has(input)) return;
-  originalAutocomplete.set(input, input.getAttribute('autocomplete'));
-  input.setAttribute('autocomplete', 'off');
-}
-
-/** Put the page's autocomplete value back exactly as it was. */
-export function restoreBrowserAutocomplete(input: HTMLInputElement): void {
-  if (!originalAutocomplete.has(input)) return;
-  const original = originalAutocomplete.get(input) ?? null;
-  originalAutocomplete.delete(input);
-  if (original === null) input.removeAttribute('autocomplete');
-  else input.setAttribute('autocomplete', original);
+/**
+ * A password field: type=password, or a text field that is one (a "show password" toggle, a
+ * site map entry, or Bitwarden's password keywords). Never a one-time code or captcha box.
+ */
+export function isPasswordInput(input: HTMLInputElement): boolean {
+  const ac = autocomplete(input);
+  if (ac.includes('one-time-code')) return false;
+  if (input.type === 'password') {
+    if (ac.includes('current-password') || ac.includes('new-password')) return true;
+    // Some sites use a password box for the one-time code or a captcha.
+    return !hasTotpKeyword(input) && !isIgnoredField(input);
+  }
+  return isLikePasswordField(input);
 }
 
 /**
@@ -135,26 +132,42 @@ function visibleNames(input: HTMLInputElement): string[] {
 export function isTotpField(input: HTMLInputElement): boolean {
   if (!TEXT_TYPES.has(input.type) && input.type !== 'number') return false;
   if (autocomplete(input).includes('one-time-code')) return true;
+  // Backup and recovery codes look the same, but a TOTP would burn the user's attempt.
+  if (isRecoveryCodeField(input) || isIgnoredField(input)) return false;
   const maxLength = input.maxLength;
   if (maxLength > 0 && (maxLength < 4 || maxLength > 10)) return false;
-  return TOTP_HINT.test(hints(input)) || visibleNames(input).some((n) => BARE_CODE.test(n));
+  return (
+    TOTP_HINT.test(hints(input)) ||
+    visibleNames(input).some((n) => BARE_CODE.test(n)) ||
+    hasTotpKeyword(input)
+  );
 }
 
 function isUsernameCandidate(input: HTMLInputElement): boolean {
-  if (!TEXT_TYPES.has(input.type)) return false;
+  if (!TEXT_TYPES.has(input.type) || isPasswordInput(input)) return false;
   const ac = autocomplete(input);
   if (ac.includes('username') || ac.includes('email')) return true;
-  if (isTotpField(input)) return false;
+  // Bitwarden's exclusions: site search, captcha, "forgot password" lookups, a new email
+  // address, and newsletter boxes.
+  if (isTotpField(input) || isIgnoredField(input) || hasNewEmailKeyword(input)) return false;
+  if (isNonLoginForm(input)) return false;
   const text = hints(input);
-  return !NOT_USERNAME_HINT.test(text) || USERNAME_HINT.test(text);
+  return !NOT_USERNAME_HINT.test(text) || USERNAME_HINT.test(text) || hasUsernameKeyword(input);
 }
 
 function usernameScore(input: HTMLInputElement): number {
   const ac = autocomplete(input);
   if (ac.includes('username')) return 4;
   if (ac.includes('email') || input.type === 'email') return 3;
-  if (USERNAME_HINT.test(hints(input))) return 2;
+  if (USERNAME_HINT.test(hints(input)) || hasUsernameKeyword(input)) return 2;
   return 1;
+}
+
+/** Not a new-password field, by autocomplete or by Bitwarden's sign-up words. */
+function isCurrentPasswordInput(input: HTMLInputElement): boolean {
+  const ac = autocomplete(input);
+  if (ac.includes('current-password')) return true;
+  return !ac.includes('new-password') && !hasAccountCreationKeyword(input);
 }
 
 /**
@@ -163,10 +176,10 @@ function usernameScore(input: HTMLInputElement): number {
  */
 export function detectLoginFields(root: Document = document): LoginFields {
   const inputs = allInputs(root).filter(isUsable);
-  const passwords = inputs.filter((i) => i.type === 'password');
+  const passwords = inputs.filter(isPasswordInput);
   const password =
     passwords.find((p) => autocomplete(p).includes('current-password')) ??
-    passwords.find((p) => !autocomplete(p).includes('new-password')) ??
+    passwords.find(isCurrentPasswordInput) ??
     null;
 
   let username: HTMLInputElement | null = null;
@@ -189,13 +202,36 @@ export function detectLoginFields(root: Document = document): LoginFields {
   } else {
     // Username-only step of a multi-step login (no password field yet): only fill a field that
     // clearly asks for it, or the one field whose name or label says "user" or "login".
+    // A lone email box can be a newsletter sign-up: Bitwarden's tie-break checks the headings
+    // and words around it unless the page marked the field as a username.
+    // Only fields that would otherwise win pay for it (it walks the headings around them).
+    const loginish = (i: HTMLInputElement) =>
+      autocomplete(i).includes('username') || !isAmbiguousFieldNonLogin(i);
     const hinted = all.filter((i) => usernameScore(i) === 2);
+    const onlyHinted = hinted.length === 1 ? hinted[0] : undefined;
     username =
-      all.find((i) => usernameScore(i) >= 3) ?? (hinted.length === 1 ? (hinted[0] ?? null) : null);
+      all.find((i) => usernameScore(i) >= 3 && loginish(i)) ??
+      (onlyHinted && loginish(onlyHinted) ? onlyHinted : undefined) ??
+      soleFieldUnderLoginHeading(all);
   }
 
   const totp = inputs.find((i) => i !== username && isTotpField(i)) ?? null;
   return { username, password, totp };
+}
+
+/**
+ * The first step of a multi-step sign-in that names nothing ("Phone, email, or Skype"): the one
+ * text field in its form, under a "Sign in" heading. Bitwarden treats a form's single text field
+ * as a username step; requiring the heading keeps contact and search forms out.
+ */
+function soleFieldUnderLoginHeading(candidates: HTMLInputElement[]): HTMLInputElement | null {
+  if (candidates.length !== 1) return null;
+  const [only] = candidates;
+  if (!only?.form) return null;
+  const siblings = Array.from(only.form.elements).filter(
+    (el) => el instanceof HTMLInputElement && TEXT_TYPES.has(el.type) && isUsable(el),
+  );
+  return siblings.length === 1 && hasLoginHeading(only) ? only : null;
 }
 
 /**
@@ -219,26 +255,30 @@ export function fillInput(input: HTMLInputElement, value: string): void {
  * form that has no current-password field.
  */
 export function isNewPasswordField(input: HTMLInputElement): boolean {
-  if (input.type !== 'password') return false;
+  if (!isPasswordInput(input)) return false;
   const ac = autocomplete(input);
   if (ac.includes('new-password')) return true;
   if (ac.includes('current-password')) return false;
-  const scope: ParentNode = input.form ?? input.ownerDocument;
-  const passwords = Array.from(scope.querySelectorAll('input[type="password"]')).filter(
-    (p): p is HTMLInputElement => p instanceof HTMLInputElement && isUsable(p),
-  );
+  // "New password", "Confirm password", "Create a password" (Bitwarden's sign-up words).
+  if (hasAccountCreationKeyword(input)) return true;
+  const passwords = passwordFieldsNear(input);
   if (passwords.length < 2) return false;
   if (passwords.some((p) => autocomplete(p).includes('current-password'))) return false;
   // Two fields: sign up (password and confirm). Three: current, new, confirm.
   return passwords.length === 2 || passwords.indexOf(input) > 0;
 }
 
+/** Usable password fields in the input's form, or in its document when it has no form. */
+function passwordFieldsNear(input: HTMLInputElement): HTMLInputElement[] {
+  const scope: ParentNode = input.form ?? input.ownerDocument;
+  return Array.from(scope.querySelectorAll('input')).filter(
+    (p) => isUsable(p) && (p === input || isPasswordInput(p)),
+  );
+}
+
 /** The password fields that should get the same new password as `input` (it and its confirm). */
 export function newPasswordFields(input: HTMLInputElement): HTMLInputElement[] {
-  const scope: ParentNode = input.form ?? input.ownerDocument;
-  const passwords = Array.from(scope.querySelectorAll('input[type="password"]')).filter(
-    (p): p is HTMLInputElement => p instanceof HTMLInputElement && isUsable(p),
-  );
+  const passwords = passwordFieldsNear(input);
   const others = passwords.filter((p) => p !== input && isNewPasswordField(p));
   return [input, ...others.filter((p) => p.value === '' || p.value === input.value)];
 }
@@ -257,7 +297,7 @@ export function readSubmitted(scope: HTMLFormElement | Document): SubmittedField
   const inputs = (scope instanceof HTMLFormElement ? Array.from(scope.elements) : allInputs(scope))
     .filter((el): el is HTMLInputElement => el instanceof HTMLInputElement)
     .filter(isUsable);
-  const passwords = inputs.filter((i) => i.type === 'password' && i.value !== '');
+  const passwords = inputs.filter((i) => isPasswordInput(i) && i.value !== '');
   if (passwords.length === 0) return null;
 
   const byAc = (hint: string) => passwords.find((p) => autocomplete(p).includes(hint)) ?? null;

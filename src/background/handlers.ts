@@ -1,4 +1,5 @@
 import { log } from '../shared/log';
+import { passwordRulesFor } from '../vault/site-data';
 import type { SearchIndex } from '../search';
 import type { Runtime } from '../shared/browser';
 import type { Settings } from '../storage/settings';
@@ -111,8 +112,11 @@ export function createHandlers(ctx: BackgroundContext): Handlers {
       return need(ctx.autofill, 'Autofill').answer(tabId, url, reply);
     },
     'autofill:generate': async ({ rules }, sender) => {
-      topFrameTab(sender);
-      return { password: await service.generatePassword({ rules }) };
+      const { url } = topFrameTab(sender);
+      // The field's own passwordrules win; otherwise Apple's list may know the site's rules.
+      return {
+        password: await service.generatePassword({ rules: rules ?? passwordRulesFor(url) }),
+      };
     },
 
     'passkey:available': async (_request, sender) => {

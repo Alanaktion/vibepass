@@ -20,6 +20,7 @@ import {
   fieldAutocomplete,
   fillInput,
   isNewPasswordField,
+  isPasswordInput,
   newPasswordFields,
   readSubmitted,
   restoreBrowserAutocomplete,
@@ -388,7 +389,7 @@ function onSubmitClick(event: MouseEvent): void {
 function onSubmitKey(event: KeyboardEvent): void {
   if (!event.isTrusted || event.key !== 'Enter' || menu.isOpen) return;
   const input = inputFromEvent(event);
-  if (input?.type !== 'password') return;
+  if (!input || !isPasswordInput(input)) return;
   void captureSubmit(scopeOf(input));
 }
 

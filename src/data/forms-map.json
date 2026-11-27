@@ -1,0 +1,796 @@
+{
+  "source": "https://github.com/bitwarden/map-the-web/releases/tag/v20261110.1",
+  "commit": "c52cdd47473f499dd7e38b7da7d0a1cef6cb60e2",
+  "schemaVersion": "1.1.0",
+  "hosts": {
+    "account.rogers.com": {
+      "forms": [
+        {
+          "category": "account-login",
+          "fields": {
+            "email": [
+              "ng-component form[method='POST'] input[type='email'][autocomplete='username'][title='Enter your registered username here']"
+            ],
+            "password": [
+              "password-form form[method='POST']#LoginForm input[type='password'][autocomplete='current-password'][aria-label='Password']"
+            ]
+          }
+        }
+      ]
+    },
+    "accountview.lpl.com": {
+      "pathnames": {
+        "/web/login": {
+          "forms": [
+            {
+              "category": "account-login",
+              "fields": {
+                "username": [
+                  "app-signin app-username form:has(input#username[name='username']) input#username[name='username'][type='search']"
+                ],
+                "password": [
+                  "app-signin app-password form:has(input#password[name='password']) input#password[name='password'][type='password']"
+                ]
+              }
+            },
+            {
+              "category": "account-creation",
+              "fields": {
+                "email": [
+                  "app-signup form[method='post'] input#inputEmail[name='inputUserName'][type='email']"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "app.composer.trade": {
+      "pathnames": {
+        "/login": {
+          "forms": [
+            {
+              "category": "account-login",
+              "fields": {
+                "email": ["form#login-form input[name='email'][type='email']"],
+                "password": ["form#login-form input[name='password'][type='password']"]
+              }
+            }
+          ]
+        },
+        "/register": {
+          "forms": [
+            {
+              "category": "account-creation",
+              "fields": {
+                "email": ["form#signup-form input[name='email'][type='email']"],
+                "newPassword": [
+                  "form#signup-form input[name='password'][type='password'][autocomplete='new-password']"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "auth.hbomax.com": {
+      "pathnames": {
+        "/login": {
+          "forms": [
+            {
+              "category": "account-login",
+              "fields": {
+                "email": [
+                  "gi-login.hydrated >>> gi-sign-in-combo.hydrated >>> gi-form.hydrated form.form input#sign-in-phoneEmail-input[type='email'][autocomplete='email'][name='phoneEmail']"
+                ],
+                "password": [
+                  "gi-login.hydrated >>> gi-sign-in-password.hydrated >>> gi-form.hydrated form.sign-in-password:not(:has(div.hide-input-group)) input#sign-in-password-password-input[type='password'][autocomplete='new-password'][name='password']"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "bankofamerica.com": {
+      "forms": [
+        {
+          "category": "account-login",
+          "fields": {
+            "username": ["input#oid"],
+            "password": ["input#pass"]
+          }
+        }
+      ]
+    },
+    "christianbook.com": {
+      "pathnames": {
+        "/apps/login": {
+          "forms": [
+            {
+              "category": "account-login",
+              "fields": {
+                "email": [
+                  "form#login_form div.CBD-Form-Login-main input#email[name='email'][type='email']"
+                ],
+                "password": [
+                  "form#login_form div.CBD-Form-Login-main input#password[name='password'][type='password']"
+                ]
+              }
+            },
+            {
+              "category": "account-creation",
+              "fields": {
+                "email": [
+                  "form#login_form div.CBD-Form-Login-alternate input#new_cust_email[name='new_cust_email'][type='email']"
+                ]
+              }
+            }
+          ]
+        },
+        "/apps/account": {
+          "forms": [
+            {
+              "category": "account-login",
+              "fields": {
+                "email": [
+                  "form#login_form div.CBD-Form-Login-main input#email[name='email'][type='email']"
+                ],
+                "password": [
+                  "form#login_form div.CBD-Form-Login-main input#password[name='password'][type='password']"
+                ]
+              }
+            },
+            {
+              "category": "account-creation",
+              "fields": {
+                "email": [
+                  "form#login_form div.CBD-Form-Login-alternate input#new_cust_email[name='new_cust_email'][type='email']"
+                ]
+              }
+            }
+          ]
+        },
+        "/apps/account/setup": {
+          "forms": [
+            {
+              "category": "account-creation",
+              "fields": {
+                "email": ["form#account-setup input#email[name='email'][type='text']"],
+                "newPassword": [
+                  "form#account-setup input#password[name='password'][type='password']",
+                  "form#account-setup input#verify_password[name='verify_password'][type='password']"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "eservices.cipc.co.za": {
+      "pathnames": {
+        "/Login.aspx": {
+          "forms": [
+            {
+              "category": "account-login",
+              "fields": {
+                "username": [
+                  "form#aspnetForm input#ctl00_cntMain_txtCustCode[name='ctl00$cntMain$txtCustCode'][type='text']"
+                ],
+                "password": [
+                  "form#aspnetForm input#ctl00_cntMain_txtPassword[name='ctl00$cntMain$txtPassword'][type='password']"
+                ]
+              }
+            }
+          ]
+        },
+        "/login.aspx": {
+          "forms": [
+            {
+              "category": "account-login",
+              "fields": {
+                "username": [
+                  "form#aspnetForm input#ctl00_cntMain_txtCustCode[name='ctl00$cntMain$txtCustCode'][type='text']"
+                ],
+                "password": [
+                  "form#aspnetForm input#ctl00_cntMain_txtPassword[name='ctl00$cntMain$txtPassword'][type='password']"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "eversource.com": {
+      "pathnames": {
+        "/security/account/login": {
+          "forms": [
+            {
+              "category": "account-login",
+              "fields": {
+                "email": ["form[name='loginForm'] input#Email\\/Username[name='email']"],
+                "password": ["form[name='loginForm'] input#password[name='password']"],
+                "username": ["form[name='loginForm'] input#Email\\/Username[name='email']"]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "identity.enterprise.spendclarity.visa.com": {
+      "pathnames": {
+        "/login": {
+          "forms": [
+            {
+              "category": "account-login",
+              "fields": {
+                "password": ["dse-input#password >>> input#password[type='password']"],
+                "username": ["dse-input#username >>> input#username[type='text']"]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "login.coinbase.com": {
+      "forms": [
+        {
+          "category": "account-login",
+          "fields": {
+            "email": ["div#two-factor form input[name='email-input']"],
+            "password": ["div#two-factor form input#current-password"]
+          }
+        }
+      ]
+    },
+    "datacamp.com": {
+      "pathnames": {
+        "/": {
+          "forms": [
+            {
+              "category": "account-creation",
+              "fields": {
+                "username": ["input#intro-user_email"],
+                "newPassword": ["input#intro-user_password"]
+              }
+            }
+          ]
+        },
+        "/users/sign_up": {
+          "forms": [
+            {
+              "category": "account-creation",
+              "fields": {
+                "username": ["input#user_email"],
+                "newPassword": ["input#user_password"]
+              }
+            }
+          ]
+        },
+        "/tracks/career": {
+          "forms": [
+            {
+              "category": "account-creation",
+              "fields": {
+                "username": ["input#-user_email"],
+                "newPassword": ["input#-user_password"]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "accounts.crowdin.com": {
+      "forms": [
+        {
+          "category": "account-login",
+          "fields": {
+            "username": ["form#login_form input#login_login"],
+            "password": ["form#login_form input#login_password"]
+          }
+        }
+      ],
+      "pathnames": {
+        "/login": {
+          "forms": [
+            {
+              "category": "account-login",
+              "fields": {
+                "username": ["form#login_form input#login_login"],
+                "password": ["form#login_form input#login_password"]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "accounts.google.com": {
+      "pathnames": {
+        "/v3/signin/identifier": {
+          "forms": [
+            {
+              "category": "account-login",
+              "fields": {
+                "email": [
+                  "input#identifierId[name='identifier'][type='text'][autocomplete='username webauthn']"
+                ],
+                "username": [
+                  "input#identifierId[name='identifier'][type='text'][autocomplete='username webauthn']"
+                ]
+              }
+            }
+          ]
+        },
+        "/v3/signin/challenge/pwd": {
+          "forms": [
+            {
+              "category": "account-login",
+              "fields": {
+                "password": ["input[name='Passwd']"]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "banking.easybank.de": {
+      "pathnames": {
+        "/logintransaction/firstlevel": {
+          "forms": [
+            {
+              "category": "account-login",
+              "fields": {
+                "username": [
+                  "div.login-form__fields vc-text-box#UserName[autocomplete='username'] input#UserName-field"
+                ],
+                "password": ["div.login-form__fields vc-text-box#Password input#Password-field"]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "factorio.com": {
+      "pathnames": {
+        "/login": {
+          "forms": [
+            {
+              "category": "account-login",
+              "fields": {
+                "username": ["input#username_or_email"],
+                "password": ["input#password"]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "firstfedcu.com": {
+      "forms": [
+        {
+          "category": "account-login",
+          "fields": {
+            "username": [
+              "div.online-banking-form iframe#tethered_frame >>> form#tethered-login input#username"
+            ],
+            "password": [
+              "div.online-banking-form iframe#tethered_frame >>> form#tethered-login input#credential"
+            ]
+          }
+        }
+      ]
+    },
+    "ecams.geico.com": {
+      "forms": [
+        {
+          "category": "account-login",
+          "fields": {
+            "username": ["form[id^='flt-semantic-node-'] input#email"],
+            "password": ["form[id^='flt-semantic-node-'] input#current-password"]
+          }
+        }
+      ]
+    },
+    "emcins.com": {
+      "pathnames": {
+        "/emc/default.asp": {
+          "forms": [
+            {
+              "category": "account-login",
+              "fields": {
+                "username": [
+                  "form.primary-auth-form[data-se='o-form'] input#okta-signin-username[name='username'][type='text']"
+                ],
+                "password": [
+                  "form.primary-auth-form[data-se='o-form'] input#okta-signin-password[name='password'][type='password']"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "myprime.com": {
+      "forms": [
+        {
+          "category": "account-login",
+          "fields": {
+            "username": [
+              "div#sign-in-form form[role='form'] input#username[name='sign-in-form-username'][type='text']"
+            ],
+            "password": [
+              "div#sign-in-form form[role='form'] input#password[name='sign-in-form-password'][type='password']"
+            ]
+          }
+        }
+      ]
+    },
+    "oge.com": {
+      "pathnames": {
+        "/": {
+          "forms": [
+            {
+              "category": "account-login",
+              "fields": {
+                "email": [
+                  "form#loginForm[name='loginForm'] input#userName[name='userName'][type='text']"
+                ],
+                "password": [
+                  "form#loginForm[name='loginForm'] input#signInoverlayPassword[name='password'][type='password']"
+                ]
+              }
+            }
+          ]
+        },
+        "/web/portal": {
+          "forms": [
+            {
+              "category": "account-login",
+              "fields": {
+                "email": [
+                  "form#loginForm[name='loginForm'] input#userName[name='userName'][type='text']"
+                ],
+                "password": [
+                  "form#loginForm[name='loginForm'] input#signInoverlayPassword[name='password'][type='password']"
+                ]
+              }
+            }
+          ]
+        },
+        "/web/portal/label_ord/signin": {
+          "forms": [
+            {
+              "category": "account-login",
+              "fields": {
+                "email": [
+                  "form#loginForm[name='loginForm'] input#userName[name='userName'][type='text']"
+                ],
+                "password": [
+                  "form#loginForm[name='loginForm'] input#signInoverlayPassword[name='password'][type='password']"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "open.texanscu.org": {
+      "forms": [
+        {
+          "category": "account-creation",
+          "fields": {
+            "email": [
+              "form[method='POST'][action='/default-form-action'] input[name='person.emailPrimary'][type='email']"
+            ]
+          }
+        }
+      ]
+    },
+    "ml.com": {
+      "pathnames": {
+        "/": {
+          "forms": [
+            {
+              "category": "account-login",
+              "fields": {
+                "username": ["div#signin-form input#oid[name='oid']"],
+                "password": ["div#signin-form input[name='pass'][type='password']"]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "patreon.com": {
+      "pathnames": {
+        "/login": {
+          "forms": [
+            {
+              "category": "account-login",
+              "fields": {
+                "email": [
+                  "main#main-content form[method='post'] input[type='email'][autocomplete='email'][name='email']:not([disabled])"
+                ],
+                "password": [
+                  "main#main-content form[method='post'] input[type='password'][autocomplete='current-password'][name='current-password']"
+                ]
+              }
+            }
+          ]
+        },
+        "/settings/account": {
+          "forms": [
+            {
+              "category": "account-update",
+              "fields": {
+                "password": [
+                  "div[class^='ChangePassword'] form input[type='password'][name='oldPassword']"
+                ],
+                "newPassword": [
+                  "div[class^='ChangePassword'] form input[type='password'][name='newPassword']",
+                  "div[class^='ChangePassword'] form input[type='password'][name='confirmPassword']"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "rowleycompany.com": {
+      "pathnames": {
+        "/checkout/cart": {
+          "forms": [
+            {
+              "category": "account-login",
+              "fields": {
+                "username": ["input#login-email"],
+                "password": ["aside.loginpopup input[name='login[password]']"]
+              }
+            },
+            {
+              "category": "account-creation",
+              "fields": {
+                "username": ["form#create-form input[name='email']"],
+                "newPassword": ["input#create-password", "input#create-password-confirmation"]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "shiftadmin.com": {
+      "pathnames": {
+        "/login.php": {
+          "forms": [
+            {
+              "category": "account-login",
+              "fields": {
+                "email": ["input#inputEmail1[name='iEmail'][type='email']"],
+                "password": ["input#inputPassword1[name='iPassword'][type='password']"]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "store.steampowered.com": {
+      "pathnames": {
+        "/login": {
+          "forms": [
+            {
+              "category": "account-login",
+              "fields": {
+                "username": [
+                  "div[data-featuretarget='login'] form[class]:has(input[type='password']) input[type='text']"
+                ],
+                "password": ["div[data-featuretarget='login'] form[class] input[type='password']"]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "texanscu.org": {
+      "forms": [
+        {
+          "category": "account-login",
+          "fields": {
+            "username": [
+              "form.olb__form[action*='Authentication/Username'] input#UserName[name='UserName'][type='text']"
+            ],
+            "password": [
+              "form.olb__form[action*='Authentication/Username'] input#Password[name='Password'][type='password']"
+            ]
+          }
+        }
+      ]
+    },
+    "tiktok.com": {
+      "forms": [
+        {
+          "category": "account-login",
+          "fields": {
+            "email": ["div#loginContainer form input[autocomplete='webauthn'][name='username']"],
+            "password": ["div#loginContainer form input[autocomplete='new-password']"],
+            "username": ["div#loginContainer form input[autocomplete='webauthn'][name='username']"]
+          }
+        },
+        {
+          "category": "account-creation",
+          "fields": {
+            "email": ["div#loginContainer form input[name='email']"],
+            "newPassword": [
+              "div#loginContainer form:has(input[name='email']) input[type='password']"
+            ],
+            "username": ["div#loginContainer form input[name='username']"]
+          }
+        }
+      ]
+    },
+    "trip.com": {
+      "forms": [
+        {
+          "category": "account-creation",
+          "fields": {
+            "newPassword": [
+              "div#ibu_login_online form[class]:has(div[class*='register-content-wrapper']) input[autocomplete='new-password']"
+            ],
+            "username": [
+              "div#ibu_login_online form[class] input[placeholder='Please enter an email address']"
+            ]
+          }
+        },
+        {
+          "category": "account-login",
+          "fields": {
+            "password": [
+              "div#ibu_login_online form[class]:has(div[class*='content-account-wrapper']) input[autocomplete='new-password']"
+            ],
+            "oneTimeCode": [
+              "div#ibu_login_online form[class]:has(div[class*='content-account-wrapper']) input[autocomplete='one-time-code']"
+            ],
+            "username": [
+              "div#ibu_login_online form[class] input[placeholder='Please enter an email address']"
+            ]
+          }
+        }
+      ]
+    },
+    "us.trip.com": {
+      "forms": [
+        {
+          "category": "account-creation",
+          "fields": {
+            "newPassword": [
+              "div#ibu_login_online form[class]:has(div[class*='register-content-wrapper']) input[autocomplete='new-password']"
+            ],
+            "username": [
+              "div#ibu_login_online form[class] input[placeholder='Please enter an email address']"
+            ]
+          }
+        },
+        {
+          "category": "account-login",
+          "fields": {
+            "password": [
+              "div#ibu_login_online form[class]:has(div[class*='content-account-wrapper']) input[autocomplete='new-password']"
+            ],
+            "oneTimeCode": [
+              "div#ibu_login_online form[class]:has(div[class*='content-account-wrapper']) input[autocomplete='one-time-code']"
+            ],
+            "username": [
+              "div#ibu_login_online form[class] input[placeholder='Please enter an email address']"
+            ]
+          }
+        }
+      ]
+    },
+    "webapp.sjcfl.us": {
+      "pathnames": {
+        "/WebappExtLogin/default.aspx": {
+          "forms": [
+            {
+              "category": "account-login",
+              "fields": {
+                "email": [
+                  "form#form1.page-wrapper input#usernameoremail[name='ctl00$ContentPlaceHolder1$usernameoremail'][type='text']"
+                ],
+                "username": [
+                  "form#form1.page-wrapper input#usernameoremail[name='ctl00$ContentPlaceHolder1$usernameoremail'][type='text']"
+                ],
+                "password": [
+                  "form#form1.page-wrapper input#password[name='ctl00$ContentPlaceHolder1$password'][type='password']"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "webtests.dev": {
+      "pathnames": {
+        "/forms/login/ambiguous-inputs": {
+          "forms": [
+            {
+              "category": "account-login",
+              "fields": {
+                "password": ["input[name='p']"],
+                "username": ["input[name='u']"]
+              }
+            }
+          ]
+        },
+        "/forms/login/iframe-login": {
+          "forms": [
+            {
+              "category": "account-login",
+              "fields": {
+                "username": ["iframe#test-iframe >>> form[action='/login'] input#username"],
+                "password": ["iframe#test-iframe >>> form[action='/login'] input#password"]
+              }
+            }
+          ]
+        },
+        "/forms/login/iframe-sandboxed-login": {
+          "forms": [
+            {
+              "category": "account-login",
+              "fields": {
+                "username": [
+                  "iframe#test-iframe[sandbox] >>> form[action='/login'] input#username"
+                ],
+                "password": ["iframe#test-iframe[sandbox] >>> form[action='/login'] input#password"]
+              }
+            }
+          ]
+        },
+        "/forms/login/simple-spec": null,
+        "/forms/login/shadow-root-inputs-closed": {
+          "forms": [
+            {
+              "category": "account-login",
+              "fields": {
+                "username": [
+                  "div#form-container >>> form[action='/login'] > div:nth-of-type(1) > div >>> input[name='username']"
+                ],
+                "password": [
+                  "div#form-container >>> form[action='/login'] > div:nth-of-type(2) > div >>> input[name='password']"
+                ]
+              }
+            }
+          ]
+        },
+        "/forms/login/security-code-multi-input": {
+          "forms": [
+            {
+              "category": "account-login",
+              "fields": {
+                "oneTimeCode": [
+                  [
+                    "input[name='otp-code-0']",
+                    "input[name='otp-code-1']",
+                    "input[name='otp-code-2']",
+                    "input[name='otp-code-3']",
+                    "input[name='otp-code-4']",
+                    "input[name='otp-code-5']"
+                  ]
+                ]
+              }
+            }
+          ]
+        },
+        "/forms/create/create-account-extended-spec": {
+          "forms": [
+            {
+              "category": "account-creation",
+              "fields": {
+                "email": ["input#email"],
+                "newPassword": ["input#password"]
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

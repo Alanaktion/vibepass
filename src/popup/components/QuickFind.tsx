@@ -107,6 +107,7 @@ export function QuickFind({ onOpen, onSettings, onNew, onGenerator, query, onQue
   }
 
   const siteCount = results.filter((r) => r.siteMatch).length;
+  const sharedCount = results.filter((r) => r.sharedSite).length;
   const host = tab?.url ? safeHost(tab.url) : null;
   const mod = modLabel();
 
@@ -148,9 +149,11 @@ export function QuickFind({ onOpen, onSettings, onNew, onGenerator, query, onQue
           const header =
             index === 0 && item.siteMatch
               ? `Suggested for ${host ?? 'this site'}`
-              : index === siteCount && siteCount > 0
-                ? 'All items'
-                : null;
+              : index === siteCount && item.sharedSite
+                ? `Saved for sites that share ${host ?? 'this site'}’s sign-in`
+                : index === siteCount + sharedCount && siteCount + sharedCount > 0
+                  ? 'All items'
+                  : null;
           const itemHost = displayHost(item.uris);
           return (
             <Fragment key={item.id}>

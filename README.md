@@ -41,7 +41,8 @@ autofill, and a calm item view. Nothing to migrate.
   options, and every password it makes is kept in an encrypted history, so a password used on a
   site but never saved isn't lost.
 - **On web pages:** on a sign-up or change-password field, the inline menu offers "Use a strong
-  password" (following the site's `passwordrules` when it has them). After you sign in, sign up,
+  password" (following the site's `passwordrules`, or Apple's published rules for sites that
+  don't declare them). After you sign in, sign up,
   or change a password, a small banner offers to save the login or update the saved password.
   You can edit the name before saving, pick which login to update, or say "Never for this site".
 - **Passkeys:** when a site asks to sign in with a passkey and your vault has one for it
@@ -54,6 +55,13 @@ autofill, and a calm item view. Nothing to migrate.
   "Use passkeys saved in Vibepass" in Settings turns this off. Not yet: passkeys in the inline
   menu (sites that only offer them as autofill suggestions), cross-origin iframes, and items
   with master password re-prompt.
+- **Finding login fields:** Vibepass uses Bitwarden's field-detection keywords and its curated
+  [Map the Web](https://github.com/bitwarden/map-the-web) list of sites whose markup hides
+  their login fields, plus our own patches in the same format (`src/content/site-rules.json`).
+  Quick find also suggests logins saved for sites that Apple's
+  [password-manager-resources](https://github.com/apple/password-manager-resources) lists as
+  sharing one account (themeforest.net and envato.com), under their own heading; filling one
+  asks first, because it isn't saved for the site you're on.
 - To stop the browser's own password manager from offering to save or fill passwords, turn on
   "Turn off the browser's built-in password manager" in Settings. Vibepass asks for the
   `privacy` permission only then. Browsers have no API for an extension to register as the

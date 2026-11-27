@@ -34,5 +34,19 @@
     "password": null,
     "newPassword": null,
     "totp": "floatingLabelInput5"
+  },
+  {
+    "url": "https://www.tiktok.com/login/phone-or-email/email",
+    "html": "<div id='loginContainer'><form><input type='text' name='username' id='username' autocomplete='webauthn' placeholder='Email or username'><input type='password' id='password' autocomplete='new-password' placeholder='Password'><button type='submit'>Log in</button></form></div>",
+    "username": "username",
+    "password": "password",
+    "newPassword": null
+  },
+  {
+    "url": "https://store.steampowered.com/login/",
+    "html": "<div data-featuretarget='login'><form class='_2v60tM463fW0V7GDe92E5f'><input type='text' id='account' class='_2GBWeup5cttgbTw8FM3tfx'><input type='password' id='secret' class='_2GBWeup5cttgbTw8FM3tfx'><button type='submit'>Sign in</button></form></div>",
+    "username": "account",
+    "password": "secret",
+    "newPassword": null
   }
 ]

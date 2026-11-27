@@ -6,7 +6,8 @@
  * The index lives only in the background worker and is cleared on lock.
  */
 import MiniSearch from 'minisearch';
-import { clearMatchCache, matchScore, parseUri } from '../vault/match';
+import { clearMatchCache, matchScore, parseUri, savedDomain } from '../vault/match';
+import { sharedCredentialDomains } from '../vault/site-data';
 import type { CipherSummary, SearchHit } from '../vault/types';
 
 export interface SearchOptions {
@@ -87,6 +88,20 @@ export function createSearchIndex(): SearchIndex {
   const rank = (item: CipherSummary, page: ReturnType<typeof parseUri>) =>
     matchScore(item.uris, page);
 
+  /** Below any real match: saved for a site Apple lists as sharing accounts with the page. */
+  const SHARED_SITE = 0.5;
+  const sharedRank = (item: CipherSummary, page: ReturnType<typeof parseUri>) => {
+    if (!page) return 0;
+    const shared = sharedCredentialDomains(page.domain);
+    if (shared.size === 0) return 0;
+    return item.uris.some((uri) => {
+      const domain = savedDomain(uri.uri);
+      return domain !== null && shared.has(domain);
+    })
+      ? SHARED_SITE
+      : 0;
+  };
+
   return {
     pageFor,
     replaceAll(items, notes, groups) {
@@ -131,10 +146,19 @@ export function createSearchIndex(): SearchIndex {
         }
       }
 
-      const ranked = scored.map(({ item, score }) => ({ item, score, site: rank(item, page) }));
+      const ranked = scored.map(({ item, score }) => {
+        const site = rank(item, page);
+        return { item, score, site: site > 0 ? site : sharedRank(item, page) };
+      });
       // Stable sort: site match quality first, then relevance (or favorites, with no query).
       ranked.sort((a, b) => b.site - a.site || b.score - a.score);
-      return ranked.slice(0, limit).map(({ item, site }) => ({ ...item, siteMatch: site > 0 }));
+      return ranked
+        .slice(0, limit)
+        .map(({ item, site }) =>
+          site === SHARED_SITE
+            ? { ...item, siteMatch: false, sharedSite: true }
+            : { ...item, siteMatch: site > 0 },
+        );
     },
 
     matchesFor(url, includeEquivalents = false) {

@@ -12,8 +12,11 @@ Last updated: 2026-11-26 (basic passkeys pulled forward from Later).
   Passkeys retain their relying-party checks.
 - The inline menu filters login names and usernames in its search box or as the user types a username. A polite
   live region announces results and keyboard selection. Manual screen-reader validation is pending.
-- The detector has its first bundled site rule and a CI corpus of three sanitized GitHub and
-  PyPI forms. The top-50 target still needs more real pages.
+- The detector uses Bitwarden's field heuristics and bundles Bitwarden's Map the Web forms map
+  (32 sites on 2026-11-27) with our own patches in the same format
+  ([ADR 0003](adr/0003-published-site-data.md)). Apple's password rules feed the generator and
+  its shared-credential groups rank in quick find. The CI corpus has seven sanitized pages; the
+  top-50 target still needs more real pages.
 - Setup explains server access before the browser prompt and shows a dismissible shortcut and
   fill tour after login.
 - CI has a pinned Vaultwarden compatibility job, a weekly latest-version run, and a workflow
@@ -280,6 +283,8 @@ until this gate is green in CI.
 2. **More form types.** Multi-step logins (username then password), split logins, signup forms
    (with generator), and password-change forms (with update banner).
 3. **Per-site overrides** for sites the heuristics get wrong, shipped as data, not code.
+   Started: Bitwarden's Map the Web forms map plus `src/content/site-rules.json` patches in its
+   format, refreshed with `scripts/dev/update-site-data.mjs` (ADR 0003).
 4. **Firefox parity.** The build exists today; this milestone covers full feature and test
    parity, including Firefox-specific shadow DOM, idle, and session storage behavior.
 5. **Permissions review.** Revisit the always-on content script on all sites against the minimal

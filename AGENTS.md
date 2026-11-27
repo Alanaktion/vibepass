@@ -33,6 +33,13 @@ Known gaps carried forward: a live check against self-hosted Bitwarden, Firefox 
 autofill, editing, and passkeys, the notifications hub (sync polls instead), WebAuthn and Duo
 two-step login, and expanding the autofill corpus beyond the first three forms.
 
+Autofill on awkward sites: don't reverse-engineer a site first. Check Bitwarden's
+[Map the Web](https://github.com/bitwarden/map-the-web) (refresh `src/data/` with
+`NODE_USE_ENV_PROXY=1 node scripts/dev/update-site-data.mjs`), then fix the general heuristic in
+`src/content/fields.ts` or `detect.ts`, and only then add a patch to
+`src/content/site-rules.json` in the same forms-map format, with a corpus page in
+`tests/fixtures/autofill-pages.json` ([ADR 0003](docs/adr/0003-published-site-data.md)).
+
 Rules that hold in every phase:
 
 - **Writes are proven, then opt-in.** Every write path re-encrypts from the server's copy and
@@ -64,9 +71,12 @@ src/
     clipboard.ts Clears copied secrets after the timeout
   popup/       Preact UI: setup, lock, quick find, item view, editor, generator, folders, trash,
                settings
-  content/     Content script: field detection, filling, inline menu (menu.ts), save banner
-               (banner.ts); passkey prompt (passkey.ts, document start) and the page-world
-               stand-in for navigator.credentials (webauthn-page.ts)
+  content/     Content script: field detection (detect.ts, with Bitwarden's heuristics in
+               fields.ts and site maps in autocomplete.ts), filling, inline menu (menu.ts), save
+               banner (banner.ts); passkey prompt (passkey.ts, document start) and the
+               page-world stand-in for navigator.credentials (webauthn-page.ts)
+  data/        Published site data, refreshed by scripts/dev/update-site-data.mjs: Bitwarden's
+               Map the Web forms map, Apple's password rules and shared-credential groups
   offscreen/   Chrome-only offscreen document that writes the clipboard for the worker
   api/         Bitwarden server API client: login, sync, cipher and folder writes
   crypto/      Thin wrapper over Bitwarden's SDK (WASM): KDF, keys, EncString, generator

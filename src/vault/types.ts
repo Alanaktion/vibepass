@@ -63,6 +63,8 @@ export interface TrashItem extends CipherSummary {
 /** A search result: a summary, plus whether it is saved for the page the user is on. */
 export interface SearchHit extends CipherSummary {
   siteMatch: boolean;
+  /** Saved for another site that shares its accounts with this one (Apple's list). */
+  sharedSite?: boolean;
 }
 
 export interface FolderSummary {
