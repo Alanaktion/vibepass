@@ -59,6 +59,16 @@ export function createPasskeys(deps: PasskeyDeps) {
     return (await deps.settings()).passkeys;
   }
 
+  /**
+   * Whether Vibepass would answer passkey requests on this page. Sites ask before offering
+   * passkey sign-in (Microsoft hides it without a platform authenticator), so this says yes
+   * whenever the setting is on and the page may use WebAuthn, locked or not, and says nothing
+   * about which passkeys the vault holds.
+   */
+  async function available(pageUrl: string): Promise<boolean> {
+    return site(pageUrl, null) !== null && (await enabled());
+  }
+
   async function getOptions(
     pageUrl: string,
     request: { rpId: string | null; allowCredentials: string[] },
@@ -194,5 +204,5 @@ export function createPasskeys(deps: PasskeyDeps) {
     return response;
   }
 
-  return { getOptions, get, createOptions, create };
+  return { available, getOptions, get, createOptions, create };
 }

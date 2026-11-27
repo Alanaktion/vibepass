@@ -59,7 +59,9 @@ export type PageResult =
   | { kind: 'fallback' }
   | { kind: 'error'; name: string; message: string }
   | { kind: 'get'; credential: AssertionJson }
-  | { kind: 'create'; credential: AttestationJson };
+  | { kind: 'create'; credential: AttestationJson }
+  /** Whether Vibepass can answer passkey requests on this page (setting on, page allowed). */
+  | { kind: 'available'; available: boolean };
 
 export const PAGE_CHANNEL = 'vibepass-webauthn';
 
@@ -78,7 +80,9 @@ export type PageRequestMessage =
       kind: 'create';
       request: PasskeyCreateRequest;
     }
-  | { channel: typeof PAGE_CHANNEL; dir: 'request'; id: string; kind: 'abort' };
+  | { channel: typeof PAGE_CHANNEL; dir: 'request'; id: string; kind: 'abort' }
+  /** isUserVerifyingPlatformAuthenticatorAvailable(): answered at once, never prompts. */
+  | { channel: typeof PAGE_CHANNEL; dir: 'request'; id: string; kind: 'available' };
 
 export type PageResponseMessage =
   /** Sent at once, so the page script knows Vibepass is listening (else it asks the browser). */

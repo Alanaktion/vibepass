@@ -212,6 +212,22 @@ function onRequest(data: PageRequestMessage): void {
     return;
   }
   reply({ channel: PAGE_CHANNEL, dir: 'ack', id: data.id });
+  if (data.kind === 'available') {
+    // A capability check, not a request: it must not end the prompt on screen.
+    const id = data.id;
+    void sendMessage('passkey:available')
+      .then(({ available }) => available)
+      .catch(() => false)
+      .then((available) => {
+        reply({
+          channel: PAGE_CHANNEL,
+          dir: 'response',
+          id,
+          result: { kind: 'available', available },
+        });
+      });
+    return;
+  }
   // One prompt at a time: a new request ends the one on screen.
   current?.end(cancelled());
 

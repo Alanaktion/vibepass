@@ -345,4 +345,16 @@ describe('passkeys in the worker', () => {
       state: 'locked',
     });
   });
+
+  it('reports a platform authenticator only where it would answer', async () => {
+    const { passkeys, service, settings } = await setup();
+    expect(await passkeys.available(PAGE)).toBe(true);
+    // Locked still counts: the prompt asks the user to unlock.
+    await service.lock();
+    expect(await passkeys.available(PAGE)).toBe(true);
+    expect(await passkeys.available('http://passkeys.vibepass-test.dev/')).toBe(false);
+    expect(await passkeys.available('not a url')).toBe(false);
+    settings.passkeys = false;
+    expect(await passkeys.available(PAGE)).toBe(false);
+  });
 });

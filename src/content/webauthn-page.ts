@@ -67,8 +67,8 @@ let nextId = 0;
 
 /** Ask the content script; resolves with its answer, or rejects if the page aborts. */
 function ask(
-  kind: 'get' | 'create',
-  request: PasskeyGetRequest | PasskeyCreateRequest,
+  kind: 'get' | 'create' | 'available',
+  request: PasskeyGetRequest | PasskeyCreateRequest | undefined,
   signal: AbortSignal | undefined,
 ): Promise<PageResult> {
   const id = `${String(Date.now())}-${String(++nextId)}`;
@@ -247,6 +247,58 @@ function install(): void {
 
   Object.defineProperty(container, 'get', { value: get, configurable: true, writable: true });
   Object.defineProperty(container, 'create', { value: create, configurable: true, writable: true });
+  installCapabilities();
+}
+
+/** Whether Vibepass answers passkey requests here; false when it isn't listening. */
+async function vibepassAvailable(): Promise<boolean> {
+  const result = await ask('available', undefined, undefined).catch(() => null);
+  return result?.kind === 'available' && result.available;
+}
+
+/**
+ * Sites check for a platform authenticator before offering passkey sign-in, and Microsoft's
+ * login hides it (or sends the user to a security key) when there is none, as on most Linux
+ * desktops. Vibepass is one when its passkeys are on, as other password managers report.
+ */
+function installCapabilities(): void {
+  const ctor = PublicKeyCredential as typeof PublicKeyCredential & {
+    getClientCapabilities?: () => Promise<Record<string, boolean>>;
+  };
+  // eslint-disable-next-line @typescript-eslint/unbound-method
+  const nativeUvpaa = ctor.isUserVerifyingPlatformAuthenticatorAvailable;
+  if (typeof nativeUvpaa === 'function') {
+    const uvpaa = async (): Promise<boolean> => {
+      const native = await nativeUvpaa.call(ctor).catch(() => false);
+      return native || vibepassAvailable();
+    };
+    Object.defineProperty(ctor, 'isUserVerifyingPlatformAuthenticatorAvailable', {
+      value: uvpaa,
+      configurable: true,
+      writable: true,
+    });
+  }
+  // eslint-disable-next-line @typescript-eslint/unbound-method
+  const nativeCapabilities = ctor.getClientCapabilities;
+  if (typeof nativeCapabilities === 'function') {
+    const capabilities = async (): Promise<Record<string, boolean>> => {
+      const native = await nativeCapabilities.call(ctor);
+      if (native.userVerifyingPlatformAuthenticator || native.passkeyPlatformAuthenticator) {
+        return native;
+      }
+      if (!(await vibepassAvailable())) return native;
+      return {
+        ...native,
+        userVerifyingPlatformAuthenticator: true,
+        passkeyPlatformAuthenticator: true,
+      };
+    };
+    Object.defineProperty(ctor, 'getClientCapabilities', {
+      value: capabilities,
+      configurable: true,
+      writable: true,
+    });
+  }
 }
 
 if (window.top === window) install();

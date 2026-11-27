@@ -49,6 +49,8 @@ autofill, and a calm item view. Nothing to migrate.
   or choose "Use another device or security key" to get the browser's usual sheet. With editing
   on, sites that make a new passkey get "Save a passkey for this site?", saved as a new login or
   onto a login you already have for the site. If Vibepass is locked it offers to unlock first.
+  While it's on, Vibepass tells sites a passkey authenticator is available, since some (such as
+  Microsoft) hide passkey sign-in on devices without one.
   "Use passkeys saved in Vibepass" in Settings turns this off. Not yet: passkeys in the inline
   menu (sites that only offer them as autofill suggestions), cross-origin iframes, and items
   with master password re-prompt.

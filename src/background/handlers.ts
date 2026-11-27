@@ -115,6 +115,10 @@ export function createHandlers(ctx: BackgroundContext): Handlers {
       return { password: await service.generatePassword({ rules }) };
     },
 
+    'passkey:available': async (_request, sender) => {
+      const { url } = topFrameTab(sender);
+      return { available: await need(ctx.passkeys, 'Passkeys').available(url) };
+    },
     'passkey:get-options': (request, sender) => {
       const { url } = topFrameTab(sender);
       return need(ctx.passkeys, 'Passkeys').getOptions(url, request);

@@ -219,6 +219,8 @@ export interface MessageMap {
   'autofill:save-answer': { request: SaveAnswer; response: { message: string } };
   /** Suggest a strong password for a new-password field, following the site's rules. */
   'autofill:generate': { request: { rules: string | null }; response: { password: string } };
+  /** Whether this page may use Vibepass's passkeys at all (for the page's capability checks). */
+  'passkey:available': { request: undefined; response: { available: boolean } };
   'passkey:get-options': {
     request: { rpId: string | null; allowCredentials: string[] };
     response: PasskeyGetOptions;
@@ -300,6 +302,7 @@ const MESSAGE_TYPES: readonly MessageType[] = [
   'autofill:pending-prompt',
   'autofill:save-answer',
   'autofill:generate',
+  'passkey:available',
   'passkey:get-options',
   'passkey:get',
   'passkey:create-options',
@@ -322,6 +325,7 @@ const CONTENT_SCRIPT_ALLOWED: ReadonlySet<MessageType> = new Set<MessageType>([
   'autofill:pending-prompt',
   'autofill:save-answer',
   'autofill:generate',
+  'passkey:available',
   'passkey:get-options',
   'passkey:get',
   'passkey:create-options',
