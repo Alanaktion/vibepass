@@ -1,4 +1,4 @@
-import { KeyRound, Lock, RefreshCw, Search, Settings, Star } from 'lucide-preact';
+import { KeyRound, Lock, RefreshCw, Search, Settings, Star, X } from 'lucide-preact';
 import { Fragment } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { sendMessage } from '../../shared/messaging';
@@ -43,6 +43,7 @@ export function QuickFind({ onOpen, onSettings, onNew, onGenerator, query, onQue
   const [results, setResults] = useState<SearchHit[]>([]);
   const [selected, setSelected] = useState(0);
   const listRef = useRef<HTMLUListElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -117,6 +118,7 @@ export function QuickFind({ onOpen, onSettings, onNew, onGenerator, query, onQue
         <div class="search-field grow">
           <Search size={14} aria-hidden="true" />
           <input
+            ref={searchRef}
             type="search"
             placeholder="Search vault"
             aria-label="Search vault"
@@ -129,6 +131,21 @@ export function QuickFind({ onOpen, onSettings, onNew, onGenerator, query, onQue
             onKeyDown={onKeyDown}
             autoFocus
           />
+          {query !== '' && (
+            <button
+              type="button"
+              class="clear"
+              aria-label="Clear search"
+              title="Clear search (Esc)"
+              tabIndex={-1}
+              onClick={() => {
+                onQuery('');
+                searchRef.current?.focus();
+              }}
+            >
+              <X size={14} aria-hidden="true" />
+            </button>
+          )}
         </div>
         {settings?.allowEdits && <NewItemMenu onNew={onNew} />}
       </header>

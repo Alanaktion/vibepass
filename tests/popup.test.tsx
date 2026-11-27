@@ -169,6 +169,19 @@ describe('popup', () => {
     expect(await screen.findByText(/Password copied · clears in 30s/)).toBeTruthy();
   });
 
+  it('clears the search with its clear button', async () => {
+    backend(base);
+    render(<App />);
+    await screen.findByText('Other');
+    const search = screen.getByLabelText<HTMLInputElement>('Search vault');
+    expect(screen.queryByRole('button', { name: 'Clear search' })).toBeNull();
+    fireEvent.input(search, { target: { value: 'oth' } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Clear search' }));
+    expect(search.value).toBe('');
+    expect(document.activeElement).toBe(search);
+    expect(screen.queryByRole('button', { name: 'Clear search' })).toBeNull();
+  });
+
   it('opens an item with secrets masked until revealed', async () => {
     backend(base);
     render(<App />);

@@ -151,6 +151,49 @@ describe('inline menu', () => {
     }
   });
 
+  it('clears the search with its button or Escape, then closes on the next Escape', () => {
+    const attach = vi.spyOn(HTMLElement.prototype, 'attachShadow');
+    const menu = new InlineMenu({ onPick: vi.fn() });
+    page('<input id="password" type="password">');
+    const anchor = document.querySelector('input')!;
+    try {
+      menu.open(anchor, [
+        { kind: 'item', item: ITEM },
+        { kind: 'item', item: { ...ITEM, id: 'work', name: 'Work account', username: 'bob' } },
+      ]);
+      const root = attach.mock.results.at(-1)!.value as ShadowRoot;
+      const filter = root.querySelector('input')!;
+      const clear = root.querySelector<HTMLButtonElement>('button.clear')!;
+      const status = root.querySelector('[role=status]')!;
+      expect(clear.hidden).toBe(true);
+      filter.value = 'bob';
+      filter.dispatchEvent(new Event('input'));
+      expect(clear.hidden).toBe(false);
+      expect(status.textContent).toContain('1 saved login');
+      // The page can't script the button.
+      clear.click();
+      expect(filter.value).toBe('bob');
+
+      menu.focusSearch();
+      // A real key press: happy-dom marks dispatched events untrusted.
+      const escape = () => {
+        const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true });
+        Object.defineProperty(event, 'isTrusted', { value: true });
+        filter.dispatchEvent(event);
+      };
+      escape();
+      expect(filter.value).toBe('');
+      expect(clear.hidden).toBe(true);
+      expect(status.textContent).toContain('2 saved logins');
+      expect(menu.isOpen).toBe(true);
+      escape();
+      expect(menu.isOpen).toBe(false);
+    } finally {
+      menu.close();
+      attach.mockRestore();
+    }
+  });
+
   it('ignores key presses the page scripted', async () => {
     const sent = worker({ state: 'unlocked', items: [ITEM] });
     const content = await import('../src/content/index');

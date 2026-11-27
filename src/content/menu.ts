@@ -57,6 +57,17 @@ const STYLE = `
 }
 .head input::placeholder { color: #8e8e93; }
 .head input::-webkit-search-cancel-button { display: none; }
+.clear {
+  all: unset;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  cursor: pointer;
+}
+.clear:hover { background: rgba(0, 0, 0, 0.06); color: #1c1c1e; }
 .brand { flex: none; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; }
 .head.plain { padding: 6px 10px 4px; border-bottom: 0; }
 .head [hidden] { display: none; }
@@ -91,14 +102,15 @@ const STYLE = `
   .menu { background: #2c2c2e; color: #f2f2f7; border-color: rgba(255, 255, 255, 0.14); }
   .head { border-color: rgba(255, 255, 255, 0.1); }
   .head input { color: #f2f2f7; }
+  .clear:hover { background: rgba(255, 255, 255, 0.1); color: #f2f2f7; }
   .row[aria-selected="true"] { background: #3a3f4b; }
   .avatar { background: #3a3f5c; color: #a5b4fc; }
   .head, .sub, .message { color: #a1a1a6; }
 }
 `;
 
-/** Lucide's "search" glyph, built as DOM so the content script needs no icon library. */
-function searchIcon(): SVGSVGElement {
+/** A Lucide glyph, built as DOM so the content script needs no icon library. */
+function icon(...paths: string[]): SVGSVGElement {
   const ns = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(ns, 'svg');
   for (const [name, value] of Object.entries({
@@ -113,15 +125,16 @@ function searchIcon(): SVGSVGElement {
   })) {
     svg.setAttribute(name, value);
   }
-  const handle = document.createElementNS(ns, 'path');
-  handle.setAttribute('d', 'm21 21-4.34-4.34');
-  const lens = document.createElementNS(ns, 'circle');
-  lens.setAttribute('cx', '11');
-  lens.setAttribute('cy', '11');
-  lens.setAttribute('r', '8');
-  svg.append(handle, lens);
+  for (const d of paths) {
+    const path = document.createElementNS(ns, 'path');
+    path.setAttribute('d', d);
+    svg.append(path);
+  }
   return svg;
 }
+
+const searchIcon = () => icon('m21 21-4.34-4.34', 'M3 11a8 8 0 1 0 16 0a8 8 0 1 0 -16 0');
+const clearIcon = () => icon('M18 6 6 18', 'm6 6 12 12');
 
 /** The letter badge beside a row; the arrow and spark mark the unlock and generate rows. */
 function avatar(row: MenuRow): string {
@@ -149,6 +162,8 @@ export class InlineMenu {
   private list: HTMLElement | null = null;
   private search: HTMLInputElement | null = null;
   private head: HTMLElement | null = null;
+  private clear: HTMLElement | null = null;
+  private root: ShadowRoot | null = null;
   private allRows: MenuRow[] = [];
   private announcement: HTMLElement | null = null;
   private rows: MenuRow[] = [];
@@ -176,6 +191,7 @@ export class InlineMenu {
       const searchable = rows.some((row) => row.kind === 'item');
       this.search.hidden = !searchable;
       if (!searchable) this.search.value = '';
+      if (this.clear) this.clear.hidden = this.search.value === '';
       this.head.classList.toggle('plain', !searchable);
       this.head.querySelector('svg')?.toggleAttribute('hidden', !searchable);
     }
@@ -195,6 +211,8 @@ export class InlineMenu {
     this.announcement = null;
     this.search = null;
     this.head = null;
+    this.clear = null;
+    this.root = null;
     this.allRows = [];
     this.rows = [];
     this.active = -1;
@@ -268,6 +286,7 @@ export class InlineMenu {
     );
     host.setAttribute('popover', 'manual');
     const root = host.attachShadow({ mode: 'closed' });
+    this.root = root;
     const style = document.createElement('style');
     style.textContent = STYLE;
     const panel = document.createElement('div');
@@ -306,15 +325,38 @@ export class InlineMenu {
     const brand = document.createElement('span');
     brand.className = 'brand';
     brand.textContent = 'Vibepass';
-    head.append(searchIcon(), search, brand);
     this.head = head;
+    const clear = document.createElement('button');
+    clear.type = 'button';
+    clear.className = 'clear';
+    clear.title = 'Clear search';
+    clear.setAttribute('aria-label', 'Clear search');
+    clear.tabIndex = -1;
+    clear.hidden = true;
+    clear.append(clearIcon());
+    clear.addEventListener('click', (event) => {
+      if (!event.isTrusted) return;
+      search.value = '';
+      clear.hidden = true;
+      this.filter();
+      // Keep typing where the user was: the search box if it had focus, else the page's field.
+      if (this.root?.activeElement === search) search.focus();
+    });
+    this.clear = clear;
+    head.append(searchIcon(), search, clear, brand);
     search.addEventListener('input', () => {
+      clear.hidden = search.value === '';
       this.filter();
     });
     search.addEventListener('keydown', (event) => {
       if (!event.isTrusted) return;
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
         this.move(event.key === 'ArrowDown' ? 1 : -1);
+      } else if (event.key === 'Escape' && search.value !== '') {
+        // First Escape clears the search, the next one closes the menu.
+        search.value = '';
+        clear.hidden = true;
+        this.filter();
       } else if (event.key === 'Escape') {
         this.anchor?.focus();
         this.close();

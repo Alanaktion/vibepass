@@ -189,6 +189,25 @@ button:disabled {
   display: none;
 }
 
+.search-field button.clear {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin-inline-end: -4px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.search-field button.clear:hover {
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+  color: var(--fg);
+}
+
 .results {
   flex: 1;
   min-height: 0;
