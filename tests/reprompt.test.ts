@@ -119,7 +119,8 @@ describe('popup session', () => {
       expect(id).toMatch(/^[0-9a-f]{32}$/);
       expect(browser.runtime.connect).toHaveBeenCalledWith({ name: POPUP_PORT_PREFIX + id });
       expect(pw(undefined)).toEqual({ session: id });
-      expect(pw('secret')).toEqual({ session: id, masterPassword: 'secret' });
+      expect(pw({ masterPassword: 'secret' })).toEqual({ session: id, masterPassword: 'secret' });
+      expect(pw({ pin: '2468' })).toEqual({ session: id, pin: '2468' });
       // Keeps the worker awake while the popup is open.
       vi.advanceTimersByTime(20_000);
       expect(postMessage).toHaveBeenCalled();

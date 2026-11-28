@@ -1,7 +1,13 @@
 import { useState } from 'preact/hooks';
+import type { RepromptAnswer } from '../lib';
 
 export type DialogRequest =
-  | { kind: 'password'; resolve: (value: string | null) => void }
+  | {
+      kind: 'password';
+      resolve: (value: RepromptAnswer | null) => void;
+      /** Why the last answer didn't work. */
+      error?: string;
+    }
   | {
       kind: 'confirm';
       message: string;
@@ -10,8 +16,18 @@ export type DialogRequest =
     };
 
 /** Modal for re-prompt and "fill anyway?", rendered over the current view. */
-export function Dialog({ request, onDone }: { request: DialogRequest; onDone: () => void }) {
+export function Dialog({
+  request,
+  pinReprompt = false,
+  onDone,
+}: {
+  request: DialogRequest;
+  /** The user allowed the PIN for re-prompt items, and it isn't paused by wrong PINs. */
+  pinReprompt?: boolean;
+  onDone: () => void;
+}) {
   const [password, setPassword] = useState('');
+  const [preferPin, setPreferPin] = useState(true);
 
   if (request.kind === 'confirm') {
     const answer = (value: boolean) => {
@@ -47,29 +63,36 @@ export function Dialog({ request, onDone }: { request: DialogRequest; onDone: ()
     );
   }
 
-  const finish = (value: string | null) => {
+  const usePin = pinReprompt && preferPin;
+  const finish = (value: RepromptAnswer | null) => {
     request.resolve(value);
     onDone();
   };
   return (
     <div class="dialog-backdrop">
-      <div class="dialog" role="dialog" aria-modal="true" aria-label="Master password required">
+      <div
+        class="dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label={usePin ? 'PIN required' : 'Master password required'}
+      >
         <form
           class="stack"
           onSubmit={(e) => {
             e.preventDefault();
-            finish(password);
+            finish(usePin ? { pin: password } : { masterPassword: password });
           }}
         >
           <p>
-            This item asks for your master password. You won’t be asked again until you close
-            Vibepass or it locks.
+            This item asks for your {usePin ? 'PIN' : 'master password'}. You won’t be asked again
+            until you close Vibepass or it locks.
           </p>
           <label>
-            Master password
+            {usePin ? 'PIN' : 'Master password'}
             <input
+              key={usePin ? 'pin' : 'password'}
               type="password"
-              autocomplete="current-password"
+              autocomplete={usePin ? 'off' : 'current-password'}
               value={password}
               onInput={(e) => {
                 setPassword(e.currentTarget.value);
@@ -78,6 +101,23 @@ export function Dialog({ request, onDone }: { request: DialogRequest; onDone: ()
               required
             />
           </label>
+          {request.error && (
+            <p role="alert" class="error">
+              {request.error}
+            </p>
+          )}
+          {pinReprompt && (
+            <button
+              type="button"
+              class="link"
+              onClick={() => {
+                setPreferPin(!preferPin);
+                setPassword('');
+              }}
+            >
+              {usePin ? 'Use master password instead' : 'Use PIN instead'}
+            </button>
+          )}
           <div class="row end">
             <button
               type="button"

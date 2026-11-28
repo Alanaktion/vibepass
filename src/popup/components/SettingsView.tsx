@@ -10,6 +10,7 @@ import {
 } from '../browserPasswords';
 import { errorMessage } from '../lib';
 import { IconButton } from './IconButton';
+import { PinSettings } from './PinSettings';
 
 interface Props {
   onBack: () => void;
@@ -83,6 +84,7 @@ export function SettingsView({ onBack, onSettings, onOpen }: Props) {
             />
             Lock when my computer locks or sleeps
           </label>
+          <PinSettings />
           <label>
             Clear copied passwords after
             <select

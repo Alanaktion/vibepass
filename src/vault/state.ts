@@ -1,5 +1,5 @@
 import type { CipherResponse } from '../api/types';
-import type { LockState, VaultStatus } from '../shared/messages';
+import { NO_PIN, type LockState, type PinStatus, type VaultStatus } from '../shared/messages';
 import type { Account } from '../storage/account';
 import type { SymmetricKey } from '../crypto/types';
 import type {
@@ -31,6 +31,12 @@ export class VaultState {
   private lastSyncError: string | null = null;
   /** Bumped whenever the decrypted view changes, so open views know to reload. */
   private version = 0;
+  private pinStatus: PinStatus = NO_PIN;
+
+  /** The service keeps PIN unlock's state; the vault only reports it. */
+  setPin(pin: PinStatus): void {
+    this.pinStatus = pin;
+  }
 
   get state(): LockState {
     if (!this.account) return 'logged-out';
@@ -46,6 +52,7 @@ export class VaultState {
       itemCount: this.userKey ? this.ciphers.length : 0,
       syncError: this.userKey ? this.lastSyncError : null,
       version: this.version,
+      pin: this.account ? this.pinStatus : NO_PIN,
     };
   }
 

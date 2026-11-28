@@ -372,7 +372,11 @@ Prioritized from beta feedback. Candidates from the spec:
   - **Not yet:** the inline menu inside frames, the save banner for logins in frames, Firefox
     live testing, phone numbers split into parts, birth dates, and saving a card or address
     typed into a form.
-- Biometric or passkey unlock.
+- PIN unlock: on main 2026-11-28 ([ADR 0005](adr/0005-pin-and-biometric-unlock.md)), with
+  the PIN optionally answering master password re-prompt. Checked by `tests/pin.test.ts`.
+- Biometric unlock (Touch ID, Windows Hello) without Bitwarden's desktop app: researched in
+  ADR 0005, not built yet. WebAuthn PRF from the extension's own page looks possible in Chrome
+  on macOS and Windows, but Firefox doesn't yet accept an extension's own origin as the RP ID.
 - Attachment upload.
 - Edge (likely little work beyond the Chrome build) and Safari (a larger port; decide whether to
   support it at all).

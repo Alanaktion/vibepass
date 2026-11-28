@@ -5,6 +5,7 @@ import type { SearchIndex } from '../src/search';
 import type { Account } from '../src/storage/account';
 import { DEFAULT_GENERATOR, type StoredGeneratorOptions } from '../src/storage/generator';
 import type { UnlockedSession } from '../src/storage/session';
+import type { PinEnvelope, PinRecord } from '../src/storage/pin';
 import type { VaultState } from '../src/vault/state';
 import type { OfficialVaultFixture } from './fixtures';
 
@@ -254,6 +255,8 @@ export function memoryDeps(server?: FakeServer): ServiceDeps & {
     writes: boolean;
     generatorOptions: StoredGeneratorOptions;
     history: string[];
+    pin: PinRecord | null;
+    pinSession: PinEnvelope | null;
   };
 } {
   const stored = {
@@ -264,6 +267,8 @@ export function memoryDeps(server?: FakeServer): ServiceDeps & {
     writes: true,
     generatorOptions: DEFAULT_GENERATOR,
     history: [] as string[],
+    pin: null as PinRecord | null,
+    pinSession: null as PinEnvelope | null,
   };
   let now = Date.parse('2026-11-25T00:00:00Z');
   return {
@@ -336,6 +341,23 @@ export function memoryDeps(server?: FakeServer): ServiceDeps & {
       },
       clearHistory: () => {
         stored.history = [];
+        return Promise.resolve();
+      },
+    },
+    pin: {
+      load: () => Promise.resolve(stored.pin ? structuredClone(stored.pin) : null),
+      save: (record) => {
+        stored.pin = structuredClone(record);
+        return Promise.resolve();
+      },
+      clear: () => {
+        stored.pin = null;
+        stored.pinSession = null;
+        return Promise.resolve();
+      },
+      loadSession: () => Promise.resolve(stored.pinSession),
+      saveSession: (envelope) => {
+        stored.pinSession = envelope;
         return Promise.resolve();
       },
     },

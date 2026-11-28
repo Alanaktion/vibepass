@@ -58,29 +58,37 @@ export async function activeTab(): Promise<ActiveTab | null> {
   }
 }
 
+/** What the user typed into the re-prompt dialog: the master password, or the PIN. */
+export type RepromptAnswer = { masterPassword: string } | { pin: string };
+
 /**
- * Asks for the master password when an item has re-prompt on. Components pass an `ask`
- * function (it shows the dialog) and wrap their secret actions with `withReprompt`.
+ * Asks for the master password (or the PIN, when the user allowed it) when an item has
+ * re-prompt on. Components pass an `ask` function (it shows the dialog, with the last error)
+ * and wrap their secret actions with `withReprompt`.
  */
-export type AskPassword = () => Promise<string | null>;
+export type AskPassword = (error?: string) => Promise<RepromptAnswer | null>;
+
+/** Wrong answers ask again; anything else is a real failure. */
+const RETRY = /incorrect master password|incorrect pin|too many incorrect pins/i;
 
 export async function withReprompt<T>(
   ask: AskPassword,
-  action: (masterPassword?: string) => Promise<T>,
+  action: (answer?: RepromptAnswer) => Promise<T>,
 ): Promise<T | null> {
   try {
     return await action();
   } catch (error) {
     if (!isCodedError(error, 'reprompt-required')) throw error;
   }
+  let lastError: string | undefined;
   for (;;) {
-    const password = await ask();
-    if (password === null) return null;
+    const answer = await ask(lastError);
+    if (answer === null) return null;
     try {
-      return await action(password);
+      return await action(answer);
     } catch (error) {
-      if (!(error instanceof Error && /incorrect master password/i.test(error.message)))
-        throw error;
+      if (!(error instanceof Error && RETRY.test(error.message))) throw error;
+      lastError = error.message;
     }
   }
 }

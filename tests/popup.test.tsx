@@ -2,7 +2,13 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/pre
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import browser from 'webextension-polyfill';
 import { App } from '../src/popup/App';
-import type { Envelope, Message, MessageType, VaultStatus } from '../src/shared/messages';
+import {
+  NO_PIN,
+  type Envelope,
+  type Message,
+  type MessageType,
+  type VaultStatus,
+} from '../src/shared/messages';
 import { DEFAULT_SETTINGS } from '../src/storage/settings';
 import { CipherType, type CipherDetail, type SearchHit } from '../src/vault/types';
 
@@ -14,6 +20,7 @@ const base: VaultStatus = {
   itemCount: 2,
   syncError: null,
   version: 1,
+  pin: NO_PIN,
 };
 
 const hit = (id: string, name: string, siteMatch: boolean): SearchHit => ({
@@ -299,6 +306,60 @@ describe('popup', () => {
     expect(screen.queryByText('hunter2')).toBeNull();
     expect(attempts).toBe(2);
     expect(calls.filter((c) => c.type === 'vault:reveal')).toHaveLength(2);
+  });
+
+  it('unlocks with the PIN, and offers the master password instead', async () => {
+    const pin = { ...NO_PIN, set: true, unlock: true };
+    const calls = backend(
+      { ...base, state: 'locked', itemCount: 0, pin },
+      {
+        'vault:unlock-pin': (payload) =>
+          (payload as { pin: string }).pin === '2468'
+            ? { ok: true, data: { ...base, pin } }
+            : { ok: false, error: 'Incorrect PIN. 4 tries left.' },
+      },
+    );
+    render(<App />);
+    const input = await screen.findByLabelText('PIN');
+    fireEvent.input(input, { target: { value: '0000' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Unlock' }));
+    expect(await screen.findByText('Incorrect PIN. 4 tries left.')).toBeTruthy();
+    fireEvent.click(screen.getByText('Use master password instead'));
+    expect(await screen.findByLabelText('Master password')).toBeTruthy();
+    fireEvent.click(screen.getByText('Use PIN instead'));
+    fireEvent.input(await screen.findByLabelText('PIN'), { target: { value: '2468' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Unlock' }));
+    expect(await screen.findByText('Example Login')).toBeTruthy();
+    expect(calls.filter((c) => c.type === 'vault:unlock-pin')).toHaveLength(2);
+  });
+
+  it('accepts the PIN on re-prompt items when turned on, showing a wrong PIN', async () => {
+    const calls = backend(
+      {
+        ...base,
+        pin: { ...NO_PIN, set: true, unlock: true, reprompt: true, repromptSetting: true },
+      },
+      {
+        'vault:reveal': (payload) => {
+          const { pin } = payload as { pin?: string };
+          if (pin === '2468') return { ok: true, data: 'hunter2' };
+          if (pin) return { ok: false, error: 'Incorrect PIN. 4 tries left.' };
+          return { ok: false, error: 'Enter your master password', code: 'reprompt-required' };
+        },
+      },
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByText('Example Login'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Copy Password (masked)' }));
+    fireEvent.input(await screen.findByLabelText('PIN'), { target: { value: '1111' } });
+    fireEvent.click(screen.getByText('Continue'));
+    expect(await screen.findByText('Incorrect PIN. 4 tries left.')).toBeTruthy();
+    fireEvent.input(screen.getByLabelText('PIN'), { target: { value: '2468' } });
+    fireEvent.click(screen.getByText('Continue'));
+    await waitFor(() => {
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith('hunter2');
+    });
+    expect(calls.filter((c) => c.type === 'vault:reveal')).toHaveLength(3);
   });
 
   it('asks before filling an item not saved for the page', async () => {

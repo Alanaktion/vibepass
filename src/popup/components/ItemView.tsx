@@ -17,7 +17,15 @@ import type { TotpCode } from '../../vault/totp';
 import type { CipherDetail, DetailField, FolderSummary } from '../../vault/types';
 import { fillItem, pw } from '../actions';
 import { usePopup, type PopupContext } from '../context';
-import { canFillItem, copyText, downloadBase64, errorMessage, iconUrl, withReprompt } from '../lib';
+import {
+  canFillItem,
+  copyText,
+  downloadBase64,
+  errorMessage,
+  iconUrl,
+  withReprompt,
+  type RepromptAnswer,
+} from '../lib';
 import { ItemIcon } from './Dialogs';
 import { IconButton } from './IconButton';
 
@@ -439,7 +447,7 @@ function TotpRow({ itemId, label, ctx }: { itemId: string; label: string; ctx: P
   const [code, setCode] = useState<TotpCode | null>(null);
   const [remaining, setRemaining] = useState(0);
   const [needsPassword, setNeedsPassword] = useState(false);
-  const [password, setPassword] = useState<string | undefined>(undefined);
+  const [password, setPassword] = useState<RepromptAnswer | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {

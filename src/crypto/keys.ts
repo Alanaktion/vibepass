@@ -107,3 +107,41 @@ export async function makeCipherKey(): Promise<SymmetricKey> {
 export async function wrapKey(key: SymmetricKey, wrappingKey: SymmetricKey): Promise<EncString> {
   return (await sdk()).wrap_symmetric_key(key, wrappingKey);
 }
+
+/** Thrown when a PIN does not decrypt the PIN-protected user key. */
+export class WrongPinError extends Error {
+  constructor() {
+    super('Incorrect PIN');
+    this.name = 'WrongPinError';
+  }
+}
+
+/**
+ * Wrap the user key with a PIN, as Bitwarden's clients do for "unlock with PIN": the PIN goes
+ * through the account's own KDF (salted with the email) and the stretched result wraps the user
+ * key. This is the same construction as the master password, so the SDK's master password
+ * functions make and open it.
+ */
+export async function protectUserKeyWithPin(
+  userKey: SymmetricKey,
+  pin: string,
+  salt: string,
+  kdf: KdfConfig,
+): Promise<EncString> {
+  return (await sdk()).encrypt_user_key_with_master_password(userKey, pin, salt, toSdkKdf(kdf));
+}
+
+/** Unlock with a PIN: unwrap the PIN-protected user key made by `protectUserKeyWithPin`. */
+export async function decryptUserKeyWithPin(
+  protectedKey: EncString,
+  pin: string,
+  salt: string,
+  kdf: KdfConfig,
+): Promise<SymmetricKey> {
+  const crypto = await sdk();
+  try {
+    return crypto.decrypt_user_key_with_master_password(protectedKey, pin, salt, toSdkKdf(kdf));
+  } catch {
+    throw new WrongPinError();
+  }
+}

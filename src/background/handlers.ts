@@ -61,6 +61,10 @@ export function createHandlers(ctx: BackgroundContext): Handlers {
     'vault:resend-device-code': (request) =>
       service.resendDeviceCode(request).then(() => undefined),
     'vault:unlock': ({ masterPassword }) => service.unlock(masterPassword),
+    'vault:unlock-pin': ({ pin }) => service.unlockWithPin(pin),
+    'pin:set': ({ pin, afterRestart, reprompt }) => service.setPin(pin, { afterRestart, reprompt }),
+    'pin:options': (patch) => service.setPinOptions(patch),
+    'pin:remove': () => service.removePin(),
     'vault:lock': () => service.lock(),
     'vault:logout': () => service.logout(),
     'vault:sync': () => service.sync(),

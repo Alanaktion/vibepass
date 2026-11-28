@@ -16,7 +16,7 @@ import { SetupScreen } from './components/SetupScreen';
 import { TrashView } from './components/TrashView';
 import type { NewItemType } from '../vault/draft';
 import { CipherType } from '../vault/types';
-import { activeTab, modLabel, type ActiveTab } from './lib';
+import { activeTab, modLabel, type ActiveTab, type RepromptAnswer } from './lib';
 
 type View =
   | { kind: 'list' }
@@ -95,9 +95,9 @@ export function App() {
   }, []);
 
   const askPassword = useCallback(
-    () =>
-      new Promise<string | null>((resolve) => {
-        setDialog({ kind: 'password', resolve });
+    (error?: string) =>
+      new Promise<RepromptAnswer | null>((resolve) => {
+        setDialog({ kind: 'password', resolve, ...(error === undefined ? {} : { error }) });
       }),
     [],
   );
@@ -238,6 +238,7 @@ export function App() {
       {dialog && (
         <Dialog
           request={dialog}
+          pinReprompt={status.pin.reprompt}
           onDone={() => {
             setDialog(null);
           }}

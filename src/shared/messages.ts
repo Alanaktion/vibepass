@@ -41,6 +41,35 @@ export interface VaultStatus {
   syncError: string | null;
   /** Changes whenever the vault's contents change (a sync or a save), so views reload. */
   version: number;
+  pin: PinStatus;
+}
+
+/** PIN unlock, as the popup needs to know it. Never holds the PIN or anything derived from it. */
+export interface PinStatus {
+  /** A PIN is set up for this account. */
+  set: boolean;
+  /** The PIN can unlock the vault right now (not after a restart or too many wrong PINs). */
+  unlock: boolean;
+  /** PIN unlock survives a browser restart. */
+  afterRestart: boolean;
+  /** The PIN is accepted, right now, for items that ask for the master password. */
+  reprompt: boolean;
+  /** The user turned on the PIN for those items (it may be paused by wrong PINs). */
+  repromptSetting: boolean;
+}
+
+export const NO_PIN: PinStatus = {
+  set: false,
+  unlock: false,
+  afterRestart: false,
+  reprompt: false,
+  repromptSetting: false,
+};
+
+/** Options for a new PIN, or changes to the current one. */
+export interface PinOptions {
+  afterRestart: boolean;
+  reprompt: boolean;
 }
 
 export interface LoginRequest {
@@ -59,6 +88,8 @@ export const POPUP_PORT_PREFIX = 'vibepass-popup:';
 
 export interface RepromptFields {
   masterPassword?: string;
+  /** The PIN instead of the master password, when the user turned that on. */
+  pin?: string;
   session?: string;
 }
 
@@ -175,6 +206,10 @@ export interface MessageMap {
   'vault:send-login-email': { request: LoginRequest; response: undefined };
   'vault:resend-device-code': { request: LoginRequest; response: undefined };
   'vault:unlock': { request: { masterPassword: string }; response: VaultStatus };
+  'vault:unlock-pin': { request: { pin: string }; response: VaultStatus };
+  'pin:set': { request: { pin: string } & PinOptions; response: VaultStatus };
+  'pin:options': { request: Partial<PinOptions>; response: VaultStatus };
+  'pin:remove': { request: undefined; response: VaultStatus };
   'vault:logout': { request: undefined; response: VaultStatus };
   'vault:lock': { request: undefined; response: VaultStatus };
   'vault:sync': { request: undefined; response: VaultStatus };
@@ -294,6 +329,10 @@ const MESSAGE_TYPES: readonly MessageType[] = [
   'vault:send-login-email',
   'vault:resend-device-code',
   'vault:unlock',
+  'vault:unlock-pin',
+  'pin:set',
+  'pin:options',
+  'pin:remove',
   'vault:logout',
   'vault:lock',
   'vault:sync',

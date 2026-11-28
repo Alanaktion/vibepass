@@ -63,6 +63,11 @@ autofill, and a calm item view. Nothing to migrate.
   don't declare them). After you sign in, sign up,
   or change a password, a small banner offers to save the login or update the saved password.
   You can edit the name before saving, pick which login to update, or say "Never for this site".
+- **Unlock with a PIN:** Settings, "Unlock with a PIN…". By default the PIN works until the
+  browser restarts, then the master password is needed once; "Ask for my master password after
+  the browser restarts" can be turned off. Five wrong PINs in a row turn PIN unlock off until
+  the next master password unlock, which turns it back on without asking for the PIN again.
+  Optionally, the PIN also answers items with master password re-prompt.
 - **Passkeys:** when a site asks to sign in with a passkey and your vault has one for it
   (saved by Vibepass or any Bitwarden client), Vibepass shows its own prompt: pick the passkey,
   or choose "Use another device or security key" to get the browser's usual sheet. With editing
@@ -183,7 +188,15 @@ browser only where it must: Chrome uses `background.service_worker`, Firefox use
 - Opening a re-prompted item requires the master password. Its notes are excluded from search.
   The password is asked once per popup: after that, the open popup can reveal, copy, fill, and
   edit protected items until it closes or the vault locks. The grant lives in worker memory,
-  tied to the popup's open connection; the popup never keeps the password.
+  tied to the popup's open connection; the popup never keeps the password. With "Accept my PIN
+  for items that ask for the master password" on, the PIN answers instead, and wrong PINs count
+  toward the same five-try limit as unlocking.
+- PIN unlock uses Bitwarden's construction: the account's KDF (PBKDF2 or Argon2id, salted with
+  the email) over the PIN wraps the user key. The PIN itself is stored only encrypted with the
+  user key. By default the PIN-wrapped key lives in `storage.session`, so it is gone when the
+  browser closes. Keeping PIN unlock across restarts stores it in `storage.local`: a short PIN
+  is then only as strong as the KDF against someone who copies the browser profile (the
+  five-try limit can't stop an offline guesser), which is why it is off by default.
 - Remembered two-step tokens are encrypted. Logging out forgets the current account's token.
 - Website icons are opt-in. Enabling them sends the hostname of each displayed site to your vault server.
 - Host access to the server is requested at runtime via `optional_host_permissions`.

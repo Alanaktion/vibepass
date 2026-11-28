@@ -3,7 +3,7 @@ import { createHandlers } from '../src/background/handlers';
 import { createRouter } from '../src/background/router';
 import { KdfType } from '../src/crypto';
 import { createSearchIndex } from '../src/search';
-import { createMessage } from '../src/shared/messages';
+import { createMessage, NO_PIN } from '../src/shared/messages';
 import { emptyVault } from '../src/vault/decrypt';
 import { VaultState } from '../src/vault/state';
 import { CipherType } from '../src/vault/types';
@@ -104,6 +104,7 @@ describe('background router', () => {
         itemCount: 0,
         syncError: null,
         version: 0,
+        pin: NO_PIN,
       },
     });
   });

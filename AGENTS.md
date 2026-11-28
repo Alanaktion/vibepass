@@ -162,6 +162,10 @@ These are not style preferences. A change that breaks one is a bug.
   `optional_host_permissions`; `privacy` only when the user turns off the browser's password
   manager. Justify any new permission in the commit message.
 - The refresh token is stored encrypted with the user key.
+- PIN unlock ([ADR 0005](docs/adr/0005-pin-and-biometric-unlock.md)): the PIN is stored only
+  encrypted with the user key; the PIN-wrapped user key stays in `storage.session` unless the
+  user chose PIN unlock across restarts. Every PIN attempt is counted before the KDF runs, and
+  after five wrong ones the PIN-wrapped key is deleted until the master password is entered.
 - Passkeys: the page script holds no secrets and only relays; the worker takes the origin from
   the message sender, checks the RP id against it, and signs. Private keys never leave the
   worker. Only trusted clicks or keys in Vibepass's prompt pick or save a passkey.

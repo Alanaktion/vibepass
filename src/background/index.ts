@@ -20,6 +20,7 @@ import {
 } from '../storage/account';
 import { generatorStore } from '../storage/generator';
 import { sessionStore } from '../storage/session';
+import { pinStore } from '../storage/pin';
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type Settings } from '../storage/settings';
 import { vaultCache } from '../storage/vault-cache';
 import { VaultState } from '../vault/state';
@@ -51,6 +52,7 @@ const service = new VaultService(vault, search, {
   device: __BROWSER__ === 'firefox' ? { type: 3, name: 'firefox' } : { type: 2, name: 'chrome' },
   writesEnabled: async () => (await settings()).allowEdits,
   generator: generatorStore,
+  pin: pinStore,
   now: () => Date.now(),
   onStatus: (status) => {
     // A login waiting for the save banner must not outlive the unlocked vault.

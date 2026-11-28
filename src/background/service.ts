@@ -11,6 +11,8 @@ import { kdfFromWire } from '../api/client';
 import {
   decryptString,
   decryptUserKeyWithPassword,
+  decryptUserKeyWithPin,
+  protectUserKeyWithPin,
   deriveLoginKeys,
   emailSalt,
   encryptString,
@@ -26,7 +28,14 @@ import {
 import { CodedError } from '../shared/errors';
 import { RepromptGrants } from './reprompt';
 import { log } from '../shared/log';
-import type { LoginRequest, SaveItemRequest, VaultStatus } from '../shared/messages';
+import {
+  NO_PIN,
+  type LoginRequest,
+  type PinOptions,
+  type SaveItemRequest,
+  type VaultStatus,
+} from '../shared/messages';
+import type { PinDeps, PinEnvelope, PinRecord } from '../storage/pin';
 import type { SearchIndex } from '../search';
 import type { CachedVault } from '../storage/vault-cache';
 import type { Account } from '../storage/account';
@@ -58,6 +67,8 @@ import {
 /** Re-prompt answers that come with a request: the password, or the popup's session. */
 export interface RepromptAuth {
   masterPassword?: string | undefined;
+  /** The PIN instead, when the user allowed it for re-prompt items. */
+  pin?: string | undefined;
   session?: string | undefined;
 }
 
@@ -95,9 +106,25 @@ export interface ServiceDeps {
     saveHistory(entries: string[]): Promise<void>;
     clearHistory(): Promise<void>;
   };
+  /** PIN unlock settings and the PIN-protected user key. */
+  pin: PinDeps;
   now(): number;
   /** Called whenever the status may have changed, so open popups can follow along. */
   onStatus?(status: VaultStatus): void;
+}
+
+/** Wrong PINs in a row before the PIN stops working until the master password is entered. */
+export const MAX_PIN_ATTEMPTS = 5;
+export const MIN_PIN_LENGTH = 4;
+const MAX_PIN_LENGTH = 64;
+
+/** Compare without stopping at the first difference, so timing doesn't leak the PIN. */
+function sameText(a: string, b: string): boolean {
+  let diff = a.length ^ b.length;
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
+  }
+  return diff === 0;
 }
 
 /** Refresh the access token this long before it actually expires. */
@@ -130,6 +157,10 @@ export class VaultService {
   /** Popup sessions that already passed the master password re-prompt. */
   readonly grants = new RepromptGrants();
   private syncing: Promise<void> | null = null;
+  /** PIN unlock settings for the current account, mirrored from storage. */
+  private pin: PinRecord | null = null;
+  /** Whether the memory-only PIN envelope exists (PIN unlock until the browser restarts). */
+  private pinInSession = false;
 
   constructor(
     private readonly vault: VaultState,
@@ -283,6 +314,15 @@ export class VaultService {
       account.kdf,
     );
     this.checkGeneration(generation);
+    await this.openVault(userKey, account);
+    void this.renewPin(userKey).catch(() => {
+      log.warn('could not renew PIN unlock');
+    });
+    return this.vault.status();
+  }
+
+  /** Offline unlock from the cache, or a first sync when there is none. */
+  private async openVault(userKey: SymmetricKey, account: Account): Promise<void> {
     await this.startSession(userKey, null);
     const cached = await this.deps.cache.read(account.userId);
     if (cached) {
@@ -292,7 +332,224 @@ export class VaultService {
     } else {
       await this.sync();
     }
+  }
+
+  // --- PIN unlock -------------------------------------------------------------------------
+
+  /**
+   * Unlock with the PIN. Every attempt counts before the KDF runs, so parallel guesses can't
+   * slip past the limit; after MAX_PIN_ATTEMPTS wrong PINs the PIN-protected key is deleted
+   * and only the master password unlocks (which turns the PIN back on).
+   */
+  async unlockWithPin(pin: string): Promise<VaultStatus> {
+    await this.ready;
+    const account = this.vault.currentAccount;
+    if (!account) throw new Error('Log in first');
+    const record = this.pin;
+    const envelope = record ? await this.pinEnvelope(record) : null;
+    if (!record || !envelope) {
+      throw new Error('PIN unlock isn’t available right now. Unlock with your master password.');
+    }
+    const generation = ++this.generation;
+    await this.countPinAttempt(record);
+    let userKey: SymmetricKey;
+    try {
+      userKey = await decryptUserKeyWithPin(
+        envelope.protectedUserKey,
+        pin,
+        envelope.salt,
+        envelope.kdf,
+      );
+    } catch {
+      throw new Error(await this.pinFailed(record));
+    }
+    try {
+      // The PIN opened the envelope, so a PIN that doesn't decrypt means the account key changed.
+      await decryptString(record.encryptedPin, userKey);
+    } catch {
+      userKey.fill(0);
+      await this.removePin();
+      throw new Error(
+        'Your account keys changed, so PIN unlock was turned off. Unlock with your master password.',
+      );
+    }
+    this.checkGeneration(generation);
+    await this.pinSucceeded(record);
+    await this.openVault(userKey, account);
     return this.vault.status();
+  }
+
+  /** Set up (or change) the PIN while unlocked. */
+  async setPin(pin: string, options: PinOptions): Promise<VaultStatus> {
+    await this.ready;
+    const account = this.vault.currentAccount;
+    const userKey = this.vault.key;
+    if (!account || !userKey) throw new CodedError('Vibepass is locked', 'locked');
+    if (pin.length < MIN_PIN_LENGTH) {
+      throw new Error(`Use at least ${String(MIN_PIN_LENGTH)} characters for your PIN`);
+    }
+    if (pin.length > MAX_PIN_LENGTH) throw new Error('That PIN is too long');
+    const encryptedPin = await encryptString(pin, userKey);
+    const envelope = await this.makePinEnvelope(userKey, pin, account);
+    this.assertKey(userKey);
+    await this.storePin(
+      { userId: account.userId, encryptedPin, ...options, failedAttempts: 0 },
+      envelope,
+    );
+    return this.vault.status();
+  }
+
+  /** Change where the PIN works: after a browser restart, and for re-prompt items. */
+  async setPinOptions(patch: Partial<PinOptions>): Promise<VaultStatus> {
+    await this.ready;
+    const record = this.pin;
+    const account = this.vault.currentAccount;
+    const userKey = this.vault.key;
+    if (!record || !account) throw new Error('Set up a PIN first');
+    if (!userKey) throw new CodedError('Vibepass is locked', 'locked');
+    const next: PinRecord = {
+      ...record,
+      afterRestart: patch.afterRestart ?? record.afterRestart,
+      reprompt: patch.reprompt ?? record.reprompt,
+    };
+    let envelope = await this.pinEnvelope(record);
+    if (!envelope && record.failedAttempts < MAX_PIN_ATTEMPTS) {
+      const pin = await decryptString(record.encryptedPin, userKey);
+      envelope = await this.makePinEnvelope(userKey, pin, account);
+    }
+    this.assertKey(userKey);
+    await this.storePin(next, envelope);
+    return this.vault.status();
+  }
+
+  async removePin(): Promise<VaultStatus> {
+    await this.ready;
+    this.pin = null;
+    this.pinInSession = false;
+    await this.deps.pin.clear();
+    this.publishPin();
+    this.notify();
+    return this.vault.status();
+  }
+
+  /**
+   * The master password was just entered: forgive wrong PINs, and wrap the user key with the
+   * PIN again if a restart or too many wrong PINs removed it, as Bitwarden's clients do.
+   */
+  private async renewPin(userKey: SymmetricKey): Promise<void> {
+    const record = this.pin;
+    const account = this.vault.currentAccount;
+    if (!record || !account || record.userId !== account.userId) return;
+    let envelope = record.failedAttempts < MAX_PIN_ATTEMPTS ? await this.pinEnvelope(record) : null;
+    if (envelope && record.failedAttempts === 0) return;
+    if (!envelope) {
+      let pin: string;
+      try {
+        pin = await decryptString(record.encryptedPin, userKey);
+      } catch {
+        await this.removePin();
+        return;
+      }
+      envelope = await this.makePinEnvelope(userKey, pin, account);
+    }
+    this.assertKey(userKey);
+    if (this.pin !== record) return;
+    await this.storePin({ ...record, failedAttempts: 0 }, envelope);
+  }
+
+  /** Re-prompt with the PIN: compare with the stored PIN, which the unlocked user key opens. */
+  private async verifyPin(pin: string, userKey: SymmetricKey): Promise<void> {
+    const record = this.pin;
+    if (!record?.reprompt || record.failedAttempts >= MAX_PIN_ATTEMPTS) {
+      throw new CodedError('Enter your master password to use this item', 'reprompt-required');
+    }
+    await this.countPinAttempt(record);
+    const expected = await decryptString(record.encryptedPin, userKey);
+    this.assertKey(userKey);
+    if (!sameText(expected, pin)) {
+      const message = await this.pinFailed(record);
+      if (record.failedAttempts >= MAX_PIN_ATTEMPTS) {
+        throw new CodedError(message, 'reprompt-required');
+      }
+      throw new Error(message);
+    }
+    await this.pinSucceeded(record);
+  }
+
+  private async makePinEnvelope(
+    userKey: SymmetricKey,
+    pin: string,
+    account: Account,
+  ): Promise<PinEnvelope> {
+    return {
+      protectedUserKey: await protectUserKeyWithPin(userKey, pin, account.salt, account.kdf),
+      salt: account.salt,
+      kdf: account.kdf,
+    };
+  }
+
+  /** The PIN-protected user key, unless too many wrong PINs locked it away. */
+  private async pinEnvelope(record: PinRecord): Promise<PinEnvelope | null> {
+    if (record.failedAttempts >= MAX_PIN_ATTEMPTS) return null;
+    return record.envelope ?? (await this.deps.pin.loadSession());
+  }
+
+  /** Save the record, with the envelope on disk or in memory as the user chose. */
+  private async storePin(record: PinRecord, envelope: PinEnvelope | null): Promise<void> {
+    const { envelope: _old, ...rest } = record;
+    const next: PinRecord = rest;
+    if (envelope && record.afterRestart) next.envelope = envelope;
+    const inSession = envelope !== null && !record.afterRestart;
+    await this.deps.pin.save(next);
+    await this.deps.pin.saveSession(inSession ? envelope : null);
+    this.pin = next;
+    this.pinInSession = inSession;
+    this.publishPin();
+    this.notify();
+  }
+
+  private async countPinAttempt(record: PinRecord): Promise<void> {
+    record.failedAttempts++;
+    await this.deps.pin.save(record);
+  }
+
+  /** A wrong PIN (already counted). Returns what to tell the user. */
+  private async pinFailed(record: PinRecord): Promise<string> {
+    const left = MAX_PIN_ATTEMPTS - record.failedAttempts;
+    if (left <= 0 && this.pin === record) {
+      // Delete the PIN-protected key; the encrypted PIN stays so the master password restores it.
+      delete record.envelope;
+      await this.deps.pin.save(record);
+      await this.deps.pin.saveSession(null);
+      this.pinInSession = false;
+    }
+    this.publishPin();
+    this.notify();
+    return left > 0
+      ? `Incorrect PIN. ${String(left)} ${left === 1 ? 'try' : 'tries'} left.`
+      : 'Too many incorrect PINs. Use your master password; your PIN works again after that.';
+  }
+
+  private async pinSucceeded(record: PinRecord): Promise<void> {
+    record.failedAttempts = 0;
+    await this.deps.pin.save(record);
+    this.publishPin();
+  }
+
+  private publishPin(): void {
+    const record = this.pin;
+    if (!record) {
+      this.vault.setPin(NO_PIN);
+      return;
+    }
+    const usable = record.failedAttempts < MAX_PIN_ATTEMPTS;
+    this.vault.setPin({
+      set: true,
+      unlock: usable && (record.envelope !== undefined || this.pinInSession),
+      afterRestart: record.afterRestart,
+      reprompt: usable && record.reprompt,
+      repromptSetting: record.reprompt,
+    });
   }
 
   async lock(): Promise<VaultStatus> {
@@ -316,6 +573,7 @@ export class VaultService {
       await this.deps.remembered.set(account.serverUrl, account.email, null);
       await this.deps.cache.clear(account.userId);
     }
+    await this.removePin();
     await this.deps.generator.clearHistory();
     await this.deps.account.clear();
     this.vault.setAccount(null);
@@ -525,7 +783,12 @@ export class VaultService {
     const ownerKey = ownerKeyFor(raw, userKey, this.vault.orgKeys);
     if (!ownerKey) throw new Error('This item belongs to an organization you can no longer read');
     if (secret && raw.reprompt === 1 && !this.grants.has(secret.session)) {
-      await this.verifyPassword(secret.masterPassword);
+      if (secret.pin !== undefined) {
+        await this.verifyPin(secret.pin, userKey);
+      } else {
+        await this.verifyPassword(secret.masterPassword);
+        void this.renewPin(userKey).catch(() => undefined);
+      }
       this.assertKey(userKey);
       this.grants.grant(secret.session);
     }
@@ -952,6 +1215,14 @@ export class VaultService {
     const account = await this.deps.account.load();
     this.vault.setAccount(account);
     if (!account) return;
+    const pin = await this.deps.pin.load();
+    if (pin && pin.userId === account.userId) {
+      this.pin = pin;
+      this.pinInSession = (await this.deps.pin.loadSession()) !== null;
+      this.publishPin();
+    } else if (pin) {
+      await this.deps.pin.clear();
+    }
     const session = await this.deps.session.load();
     if (!session) return;
     this.session = session;
