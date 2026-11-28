@@ -266,6 +266,25 @@ try {
     await page.evaluate(() => document.querySelector('vibepass-passkey')?.shadowRoot === null),
   );
   await page.keyboard.press('Enter');
+  const verify = async () => {
+    await new Promise((resolve, reject) => {
+      const deadline = Date.now() + 5000;
+      const wait = () => {
+        const dialog = context.pages().find((p) => p.url().includes('/popup/index.html?verify='));
+        if (dialog)
+          resolve(
+            dialog
+              .getByLabel('Master password')
+              .fill(password)
+              .then(() => dialog.getByRole('button', { name: 'Verify', exact: true }).click()),
+          );
+        else if (Date.now() > deadline) reject(new Error('Verification window unavailable'));
+        else setTimeout(wait, 50);
+      };
+      wait();
+    });
+  };
+  await verify();
   const created = await result();
   check('new passkey verifies on the site', created.ok === true);
   check('credProps reports a discoverable passkey', created.rk === true);
@@ -289,6 +308,7 @@ try {
   await page.click('#signin');
   await prompt();
   await page.keyboard.press('Enter');
+  await verify();
   const signedIn = await result();
   check('sign-in with the saved passkey verifies', signedIn.ok === true);
   check('the sign-in used the new passkey', signedIn.id === created.id);

@@ -189,6 +189,18 @@ export function SettingsView({ onBack, onSettings, onOpen }: Props) {
             {settings.allowEdits ? ', and save new ones to it' : ''}. Choose “Use another device” to
             use your browser or a security key instead.
           </p>
+          {settings.passkeys && (
+            <label class="check">
+              <input
+                type="checkbox"
+                checked={settings.skipPasskeyVerification}
+                onChange={(e) => {
+                  save({ skipPasskeyVerification: e.currentTarget.checked });
+                }}
+              />
+              Always skip passkey identity verification (sites requiring verification may decline)
+            </label>
+          )}
           {settings.allowEdits && (
             <div class="row">
               <button

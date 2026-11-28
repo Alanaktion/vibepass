@@ -1,3 +1,4 @@
+import { verifyPasskeyUser } from './passkey-verification';
 /**
  * Background service worker (Chrome) / background script (Firefox).
  *
@@ -118,7 +119,13 @@ const autofill = createAutofill({
   },
 });
 
-const passkeys = createPasskeys({ vault, search, service, settings });
+const passkeys = createPasskeys({
+  vault,
+  search,
+  service,
+  settings,
+  verify: (origin) => verifyPasskeyUser(origin, (password) => service.verifyPassword(password)),
+});
 
 const autoLock = createAutoLock({
   idle: browser.idle,

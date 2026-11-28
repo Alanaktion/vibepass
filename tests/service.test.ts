@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { VaultService } from '../src/background/service';
 import { createSearchIndex } from '../src/search';
 import { CodedError } from '../src/shared/errors';
@@ -103,6 +103,59 @@ describe('VaultService', () => {
     const status = await service.unlock(fixture.password);
     expect(status).toMatchObject({ state: 'unlocked', itemCount: 2 });
     await expect(service.unlock('wrong')).rejects.toThrow('Incorrect master password');
+  });
+
+  it('discards a refresh that finishes after lock', async () => {
+    const { service, deps, server } = setup();
+    await service.login(LOGIN);
+    await service.lock();
+    const fetch = server.fetch;
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = vi.fn();
+    server.fetch = async (url, init) => {
+      if (
+        typeof init?.body === 'string' &&
+        new URLSearchParams(init.body).get('grant_type') === 'refresh_token'
+      ) {
+        started();
+        await pending;
+      }
+      return fetch(url, init);
+    };
+    await service.unlock(fixture.password);
+    await vi.waitFor(() => {
+      expect(started).toHaveBeenCalled();
+    });
+    const sync = service.sync();
+    await service.lock();
+    release();
+    await expect(sync).rejects.toMatchObject({ code: 'locked' });
+    expect(deps.stored.session).toBeNull();
+  });
+
+  it('discards a re-prompt that finishes after lock', async () => {
+    const { service, server } = setup();
+    server.sync = structuredClone(fixture.sync);
+    server.sync.ciphers.find((c) => c.id === loginId)!.reprompt = 1;
+    await service.login(LOGIN);
+    const session = 'c'.repeat(32);
+    service.grants.connect(session);
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const verification = vi.spyOn(service, 'verifyPassword').mockReturnValue(pending);
+    const item = service.item(loginId, { session, masterPassword: fixture.password });
+    await vi.waitFor(() => {
+      expect(verification).toHaveBeenCalled();
+    });
+    await service.lock();
+    release();
+    await expect(item).rejects.toMatchObject({ code: 'locked' });
+    expect(service.grants.has(session)).toBe(false);
   });
 
   it('refreshes the access token with the stored refresh token on sync after unlock', async () => {
@@ -379,6 +432,16 @@ describe('organizations (read-only)', () => {
     await expect(service.reveal(ORG_CIPHER_ID, 'login.password')).rejects.toThrow(
       'Your organization hides this value',
     );
+    const editor = await service.editable(ORG_CIPHER_ID);
+    expect(editor.draft.login).toBeNull();
+    expect(editor.draft.fields).toEqual([]);
+    editor.draft.notes = 'Updated notes';
+    await service.saveItem({
+      id: editor.id,
+      draft: editor.draft,
+      revisionDate: editor.revisionDate,
+    });
+    expect((await service.fillData(editor.id)).item.fields[0]?.value).toBe('4321');
     // Autofill still gets it, as in the official clients.
     expect((await service.fillData(ORG_CIPHER_ID)).item.login?.password).toBe('team-secret');
   });

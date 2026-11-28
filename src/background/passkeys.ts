@@ -33,6 +33,7 @@ export interface PasskeyDeps {
   search: SearchIndex;
   service: VaultService;
   settings(): Promise<Settings>;
+  verify: (origin: string) => Promise<void>;
   now?: () => number;
 }
 
@@ -54,6 +55,13 @@ function passkeysFor(item: DecryptedCipher, rpId: string): StoredPasskey[] {
 
 export function createPasskeys(deps: PasskeyDeps) {
   const now = deps.now ?? (() => Date.now());
+
+  async function verify(origin: string, requirement: string | null | undefined) {
+    if (requirement === 'discouraged' || (await deps.settings()).skipPasskeyVerification)
+      return false;
+    await deps.verify(origin);
+    return true;
+  }
 
   async function enabled(): Promise<boolean> {
     return (await deps.settings()).passkeys;
@@ -119,6 +127,9 @@ export function createPasskeys(deps: PasskeyDeps) {
 
     // Like the official clients: synced passkeys start at 0 and stay there, which tells sites
     // not to check the counter. Imported passkeys that count keep counting.
+    const key = deps.vault.key;
+    const verified = await verify(where.origin, request.userVerification);
+    deps.service.assertKey(key);
     let counter = passkey.counter;
     if (counter > 0) {
       counter += 1;
@@ -128,7 +139,14 @@ export function createPasskeys(deps: PasskeyDeps) {
         });
       }
     }
-    return signAssertion(passkey, { challenge: request.challenge, origin: where.origin, counter });
+    const response = await signAssertion(passkey, {
+      challenge: request.challenge,
+      origin: where.origin,
+      counter,
+      verified,
+    });
+    deps.service.assertKey(key);
+    return response;
   }
 
   async function createOptions(
@@ -187,8 +205,12 @@ export function createPasskeys(deps: PasskeyDeps) {
     if (!settings.allowEdits) {
       throw new CodedError('Turn on editing in Settings to save passkeys', 'writes-off');
     }
+    const key = deps.vault.key;
+    const verified = await verify(where.origin, request.userVerification);
+    deps.service.assertKey(key);
     const { passkey, response } = await createPasskey({
       rpId: where.rpId,
+      verified,
       rpName: request.rp.name || where.rpId,
       userHandle: request.user.id,
       userName: request.user.name,
@@ -200,7 +222,9 @@ export function createPasskeys(deps: PasskeyDeps) {
       now: new Date(now()),
     });
     // Saved before the site hears about it, so a passkey the site knows is always in the vault.
+    deps.service.assertKey(key);
     await deps.service.savePasskey(cipherId, passkey);
+    deps.service.assertKey(key);
     return response;
   }
 

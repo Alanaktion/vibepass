@@ -26,7 +26,7 @@ import {
 import { CodedError } from '../shared/errors';
 import { RepromptGrants } from './reprompt';
 import { log } from '../shared/log';
-import type { LoginRequest, VaultStatus } from '../shared/messages';
+import type { LoginRequest, SaveItemRequest, VaultStatus } from '../shared/messages';
 import type { SearchIndex } from '../search';
 import type { CachedVault } from '../storage/vault-cache';
 import type { Account } from '../storage/account';
@@ -51,7 +51,6 @@ import {
   type CipherDetail,
   type EditableItem,
   type FolderSummary,
-  type ItemDraft,
   type PasswordHistoryEntry,
   type TrashItem,
 } from '../vault/types';
@@ -117,6 +116,16 @@ export interface FillData {
  */
 export class VaultService {
   private readonly ready: Promise<void>;
+  private generation = 0;
+
+  private checkGeneration(generation: number): void {
+    if (generation !== this.generation) throw new CodedError('Vault session changed', 'locked');
+  }
+
+  assertKey(key: SymmetricKey | null): void {
+    if (!key || this.vault.key !== key) throw new CodedError('Vault session changed', 'locked');
+  }
+
   private session: UnlockedSession | null = null;
   /** Popup sessions that already passed the master password re-prompt. */
   readonly grants = new RepromptGrants();
@@ -153,6 +162,7 @@ export class VaultService {
 
   async login(req: LoginRequest): Promise<VaultStatus> {
     await this.ready;
+    const generation = ++this.generation;
     const { api, email, prelogin, salt, keys } = await this.loginKeys(req);
     try {
       const token = await this.requestToken(api, email, keys, req.challenge);
@@ -188,10 +198,14 @@ export class VaultService {
           ? await encryptString(token.refresh_token, userKey)
           : null,
       };
+      this.checkGeneration(generation);
       await this.deps.account.save(account);
+      this.checkGeneration(generation);
       this.vault.setAccount(account);
       await this.startSession(userKey, token);
-      await this.applySync(sync, account, await this.tryRevision(api));
+      const revision = await this.tryRevision(api);
+      this.assertKey(userKey);
+      await this.applySync(sync, account, revision);
       this.notify();
       return this.vault.status();
     } finally {
@@ -261,12 +275,14 @@ export class VaultService {
     await this.ready;
     const account = this.vault.currentAccount;
     if (!account) throw new Error('Log in first');
+    const generation = ++this.generation;
     const userKey = await decryptUserKeyWithPassword(
       account.protectedUserKey,
       password,
       account.salt,
       account.kdf,
     );
+    this.checkGeneration(generation);
     await this.startSession(userKey, null);
     const cached = await this.deps.cache.read(account.userId);
     if (cached) {
@@ -281,6 +297,7 @@ export class VaultService {
 
   async lock(): Promise<VaultStatus> {
     await this.ready;
+    this.generation++;
     const wasUnlocked = this.vault.isUnlocked;
     this.vault.lock();
     this.grants.revokeAll();
@@ -346,13 +363,15 @@ export class VaultService {
   private async doSync(force: boolean): Promise<void> {
     const account = this.vault.currentAccount;
     if (!account || !this.vault.key) throw new CodedError('Unlock first', 'locked');
-    const api = await this.authedApi(account, this.vault.key);
+    const key = this.vault.key;
+    const api = await this.authedApi(account, key);
     const revision = await this.tryRevision(api);
     if (!force && revision !== null && revision === this.session?.revision) {
       this.vault.markSynced(new Date(this.deps.now()));
       return;
     }
     const sync = await api.sync();
+    this.assertKey(key);
     await this.applySync(sync, account, revision);
     this.notify();
   }
@@ -380,6 +399,8 @@ export class VaultService {
   ): Promise<void> {
     if (sync.profile.id !== account.userId)
       throw new Error('The server returned a different account');
+    const key = this.vault.key;
+    if (!key || this.vault.currentAccount?.userId !== account.userId) return;
     // If the master password or KDF changed in another client, keep offline unlock working.
     const unlock = sync.userDecryption?.masterPasswordUnlock;
     if (unlock && unlock.masterKeyEncryptedUserKey !== account.protectedUserKey) {
@@ -395,10 +416,9 @@ export class VaultService {
         protectedUserKey: unlock.masterKeyEncryptedUserKey,
       };
       await this.deps.account.save(updated);
+      this.assertKey(key);
       this.vault.setAccount(updated);
     }
-    const key = this.vault.key;
-    if (!key || this.vault.currentAccount?.userId !== account.userId) return;
     const { domains, ...rest } = sync;
     const cached: CachedVault = { ...rest };
     delete cached.encryptedDomains;
@@ -411,8 +431,11 @@ export class VaultService {
       ];
       cached.encryptedDomains = await encryptString(JSON.stringify(groups), key);
     }
+    this.assertKey(key);
     await this.deps.cache.write(account.userId, cached);
+    this.assertKey(key);
     await this.showVault(cached);
+    this.assertKey(key);
     this.vault.markSynced(new Date(this.deps.now()));
     if (this.session && this.vault.isUnlocked) {
       this.session = { ...this.session, revision };
@@ -438,6 +461,7 @@ export class VaultService {
   }
 
   private async startSession(userKey: SymmetricKey, token: TokenResponse | null): Promise<void> {
+    this.grants.revokeAll();
     this.session = {
       userKey,
       accessToken: token?.access_token ?? null,
@@ -454,19 +478,24 @@ export class VaultService {
     account: Account,
     userKey: SymmetricKey,
   ): Promise<string> {
+    this.assertKey(userKey);
     const session = this.session;
     if (session?.accessToken && session.accessTokenExpiresAt - TOKEN_SKEW_MS > this.deps.now()) {
       return session.accessToken;
     }
     if (!account.refreshToken) throw new ApiError('Your session expired. Log in again.', 401);
     const refreshToken = await decryptString(account.refreshToken, userKey);
+    this.assertKey(userKey);
     const token = await api.refresh(refreshToken);
+    this.assertKey(userKey);
     if (token.refresh_token && token.refresh_token !== refreshToken) {
       const updated = {
         ...account,
         refreshToken: await encryptString(token.refresh_token, userKey),
       };
+      this.assertKey(userKey);
       await this.deps.account.save(updated);
+      this.assertKey(userKey);
       this.vault.setAccount(updated);
     }
     this.session = {
@@ -476,6 +505,7 @@ export class VaultService {
       revision: session?.revision ?? null,
     };
     await this.deps.session.save(this.session);
+    this.assertKey(userKey);
     return token.access_token;
   }
 
@@ -496,13 +526,16 @@ export class VaultService {
     if (!ownerKey) throw new Error('This item belongs to an organization you can no longer read');
     if (secret && raw.reprompt === 1 && !this.grants.has(secret.session)) {
       await this.verifyPassword(secret.masterPassword);
+      this.assertKey(userKey);
       this.grants.grant(secret.session);
     }
-    return decryptCipher(raw, ownerKey);
+    const item = await decryptCipher(raw, ownerKey);
+    this.assertKey(userKey);
+    return item;
   }
 
   /** Master password re-prompt: check the password against the account, offline. */
-  private async verifyPassword(password: string | undefined): Promise<void> {
+  async verifyPassword(password: string | undefined): Promise<void> {
     if (!password) {
       throw new CodedError('Enter your master password to use this item', 'reprompt-required');
     }
@@ -533,12 +566,17 @@ export class VaultService {
   async totp(id: string, auth: RepromptAuth = {}): Promise<TotpCode> {
     const item = await this.decryptItem(id, auth);
     if (!item.login?.totp) throw new Error('This item has no one-time password');
-    return generateTotp(item.login.totp, this.deps.now());
+    const key = this.vault.key;
+    const code = await generateTotp(item.login.totp, this.deps.now());
+    this.assertKey(key);
+    return code;
   }
 
   async fillData(id: string, auth: RepromptAuth = {}): Promise<FillData> {
     const item = await this.decryptItem(id, auth);
+    const key = this.vault.key;
     const totp = item.login?.totp ? await generateTotp(item.login.totp, this.deps.now()) : null;
+    this.assertKey(key);
     return { item, totp };
   }
 
@@ -566,6 +604,7 @@ export class VaultService {
     const wrapped = meta.key ?? local.key;
     const fileKey = wrapped ? await unwrapKey(wrapped, itemKey) : itemKey;
     const plain = (await sdk()).symmetric_decrypt_filedata(encrypted, fileKey);
+    this.assertKey(userKey);
     return { fileName: local.fileName, base64: toBase64(plain) };
   }
 
@@ -618,13 +657,19 @@ export class VaultService {
     const item = await this.decryptItem(id, auth);
     if (!item.canEdit) throw new Error('You can’t edit this item');
     if (item.deletedDate) throw new Error('Restore this item before editing it');
+    const draft = toDraft(item);
+    if (!item.viewPassword) {
+      draft.fields = [];
+      draft.login = null;
+    }
     return {
+      restricted: !item.viewPassword,
       id: item.id,
       revisionDate: item.revisionDate,
       organization: item.organizationId
         ? (this.vault.organizations.find((o) => o.id === item.organizationId)?.name ?? null)
         : null,
-      draft: toDraft(item),
+      draft,
     };
   }
 
@@ -633,13 +678,13 @@ export class VaultService {
    * the editor started from; if the server or a sync has a newer one, this throws a conflict
    * unless `overwrite` is set, in which case it syncs and saves over the newest copy.
    */
-  async saveItem(
-    request: {
-      id: string | null;
-      draft: ItemDraft;
-      revisionDate?: string | undefined;
-      overwrite?: boolean | undefined;
-    },
+  saveItem(request: SaveItemRequest): Promise<string> {
+    return this.persistItem(request, 'editor');
+  }
+
+  private async persistItem(
+    request: SaveItemRequest,
+    source: 'editor' | 'worker',
     passkey?: PasskeyChange,
   ): Promise<string> {
     const { api, account, userKey } = await this.writer();
@@ -659,13 +704,20 @@ export class VaultService {
     ) {
       throw new Error('That folder no longer exists');
     }
+    const draft = { ...request.draft };
+    if (source === 'editor' && previous && !previous.viewPassword) {
+      const original = toDraft(previous);
+      draft.login = original.login;
+      draft.fields = original.fields;
+    }
     const body = await encryptDraft(
-      request.draft,
+      draft,
       base,
       previous,
       { ownerKey, userId: account.userId, now: new Date(this.deps.now()) },
       passkey,
     );
+    this.assertKey(userKey);
     const saved =
       base && request.id ? await api.updateCipher(request.id, body) : await api.createCipher(body);
     await this.applyCipher(account, saved);
@@ -713,7 +765,9 @@ export class VaultService {
       if (draft.login && !draft.login.username && passkey.userName) {
         draft.login.username = passkey.userName;
       }
-      return this.saveItem({ id, draft, revisionDate: item.revisionDate }, { add: passkey });
+      return this.persistItem({ id, draft, revisionDate: item.revisionDate }, 'worker', {
+        add: passkey,
+      });
     }
     const draft = newDraft(CipherType.Login);
     draft.name = passkey.rpName || passkey.rpId;
@@ -721,14 +775,15 @@ export class VaultService {
       draft.login.username = passkey.userName ?? '';
       draft.login.uris = [{ uri: `https://${passkey.rpId}`, match: null }];
     }
-    return this.saveItem({ id: null, draft }, { add: passkey });
+    return this.persistItem({ id: null, draft }, 'worker', { add: passkey });
   }
 
   /** Store a passkey's new signature counter. */
   async savePasskeyCounter(id: string, credentialId: string, value: number): Promise<void> {
     const item = await this.decryptItem(id, null);
-    await this.saveItem(
+    await this.persistItem(
       { id, draft: toDraft(item), revisionDate: item.revisionDate },
+      'worker',
       { counter: { credentialId, value } },
     );
   }
@@ -739,7 +794,7 @@ export class VaultService {
     if (!item.login) throw new Error('Only logins have a password to update');
     const draft = toDraft(item);
     if (draft.login) draft.login.password = password;
-    await this.saveItem({ id, draft, revisionDate: item.revisionDate });
+    await this.persistItem({ id, draft, revisionDate: item.revisionDate }, 'worker');
   }
 
   /** Favorite or move an item without re-encrypting it. */
@@ -866,6 +921,7 @@ export class VaultService {
     await this.deps.generator.saveHistory(
       [await encryptString(entry, userKey), ...history].slice(0, HISTORY_LIMIT),
     );
+    this.assertKey(userKey);
     return password;
   }
 
@@ -883,6 +939,7 @@ export class VaultService {
         // Skip it.
       }
     }
+    this.assertKey(userKey);
     return entries;
   }
 

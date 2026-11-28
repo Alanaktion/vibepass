@@ -99,7 +99,7 @@ describe('passkey authenticator', () => {
     expect(authData.slice(0, 32)).toEqual(
       await sha256(new TextEncoder().encode('passkeys.vibepass-test.dev')),
     );
-    expect(authData[32]).toBe(0x5d);
+    expect(authData[32]).toBe(0x59);
     expect(authData.slice(33, 37)).toEqual(new Uint8Array(4));
     expect(authData.slice(53, 55)).toEqual(new Uint8Array([0, 16]));
     expect(toBase64Url(authData.slice(55, 71))).toBe(response.id);
@@ -117,7 +117,7 @@ describe('passkey authenticator', () => {
     });
     expect(assertion.id).toBe(response.id);
     expect(assertion.userHandle).toBe('dXNlci1oYW5kbGU');
-    expect(fromBase64Url(assertion.authenticatorData)[32]).toBe(0x1d);
+    expect(fromBase64Url(assertion.authenticatorData)[32]).toBe(0x19);
     expect(await verifyAssertion(response.publicKey, assertion)).toBe(true);
     // A tampered challenge doesn't verify.
     const forged = { ...assertion, clientDataJSON: toBase64Url(new TextEncoder().encode('{}')) };
@@ -169,6 +169,7 @@ async function setup(patch: Partial<Settings> = {}) {
   });
   const settings: Settings = { ...DEFAULT_SETTINGS, allowEdits: true, ...patch };
   const passkeys = createPasskeys({
+    verify: () => Promise.resolve(),
     vault,
     search,
     service,
@@ -191,6 +192,16 @@ function createRequest(): PasskeyCreateRequest {
 }
 
 describe('passkeys in the worker', () => {
+  it('signs the actual verification result when the user skips the check', async () => {
+    const { passkeys, settings } = await setup();
+    const request = { ...createRequest(), userVerification: 'required' };
+    const verified = await passkeys.create(PAGE, request, null);
+    expect(fromBase64Url(verified.authenticatorData)[32]! & 4).toBe(4);
+    settings.skipPasskeyVerification = true;
+    const skipped = await passkeys.create(PAGE, request, null);
+    expect(fromBase64Url(skipped.authenticatorData)[32]! & 4).toBe(0);
+  });
+
   it('saves a new passkey as a login, then signs in with it', async () => {
     const { passkeys, server, vault } = await setup();
     const options = await passkeys.createOptions(PAGE, {

@@ -18,6 +18,7 @@ export interface PasskeyGetRequest {
 
 /** navigator.credentials.create({ publicKey }) as the worker needs it. */
 export interface PasskeyCreateRequest {
+  userVerification?: string | null;
   rp: { id: string | null; name: string };
   user: { id: string; name: string; displayName: string };
   challenge: string;

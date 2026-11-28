@@ -109,10 +109,9 @@ async function authenticatorData(
   rpId: string,
   counter: number,
   attested: Uint8Array | null,
+  verified: boolean,
 ): Promise<Uint8Array<ArrayBuffer>> {
-  // User verified: the vault was unlocked with the master password and the user picked this
-  // passkey in Vibepass's own prompt, as the official clients treat it.
-  const flags = FLAG_UP | FLAG_UV | FLAG_BE | FLAG_BS | (attested ? FLAG_AT : 0);
+  const flags = FLAG_UP | (verified ? FLAG_UV : 0) | FLAG_BE | FLAG_BS | (attested ? FLAG_AT : 0);
   const count = new Uint8Array(4);
   new DataView(count.buffer).setUint32(0, counter >>> 0);
   return concat(
@@ -192,6 +191,7 @@ function newGuid(): string {
 }
 
 export interface NewPasskeyInput {
+  verified?: boolean;
   rpId: string;
   rpName: string;
   /** base64url */
@@ -227,7 +227,7 @@ export async function createPasskey(
     rawId,
     coseKey(fromBase64Url(jwk.x), fromBase64Url(jwk.y)),
   );
-  const authData = await authenticatorData(input.rpId, 0, attested);
+  const authData = await authenticatorData(input.rpId, 0, attested, input.verified === true);
   const clientData = clientDataJson('webauthn.create', input.challenge, input.origin);
 
   const passkey: StoredPasskey = {
@@ -261,7 +261,7 @@ export async function createPasskey(
 /** Sign in with a stored passkey. `counter` is the value to report (see the worker). */
 export async function signAssertion(
   passkey: StoredPasskey,
-  input: { challenge: string; origin: string; counter: number },
+  input: { challenge: string; origin: string; counter: number; verified?: boolean },
 ): Promise<AssertionJson> {
   if (passkey.keyAlgorithm !== 'ECDSA' || passkey.keyCurve !== 'P-256') {
     throw new Error('This passkey uses a key type Vibepass can’t sign with yet');
@@ -277,7 +277,12 @@ export async function signAssertion(
     ['sign'],
   );
   pkcs8.fill(0);
-  const authData = await authenticatorData(passkey.rpId, input.counter, null);
+  const authData = await authenticatorData(
+    passkey.rpId,
+    input.counter,
+    null,
+    input.verified === true,
+  );
   const clientData = clientDataJson('webauthn.get', input.challenge, input.origin);
   const signature = new Uint8Array(
     await crypto.subtle.sign(

@@ -26,6 +26,7 @@ export interface Settings {
    * (saving also needs allowEdits).
    */
   passkeys: boolean;
+  skipPasskeyVerification: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -38,6 +39,7 @@ export const DEFAULT_SETTINGS: Settings = {
   allowEdits: false,
   offerToSave: true,
   passkeys: true,
+  skipPasskeyVerification: false,
 };
 
 export const LOCK_AFTER_CHOICES = [1, 5, 15, 30, 60, 240, 0] as const;

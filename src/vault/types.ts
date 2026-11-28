@@ -204,6 +204,7 @@ export interface ItemDraft {
 
 /** An item opened for editing: the draft plus what the editor needs to save it safely. */
 export interface EditableItem {
+  restricted?: boolean;
   id: string;
   /** Sent back on save, so the server can refuse it if another client changed the item. */
   revisionDate: string;

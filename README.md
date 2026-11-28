@@ -174,6 +174,8 @@ browser only where it must: Chrome uses `background.service_worker`, Firefox use
 - The refresh token is stored encrypted with the user key, so it is useless while locked.
   Unlock works offline from the encrypted IndexedDB cache; sync then runs in the background.
 
+Passkey registration and sign-in ask for the master password in an extension window when the site requests or prefers user verification. Settings can skip this check for every site. The signed response then reports user presence only, and sites requiring verification may decline it.
+
 ### Crypto
 
 Crypto comes from Bitwarden's official SDK, `@bitwarden/sdk-internal` (GPL-3.0), pinned to an

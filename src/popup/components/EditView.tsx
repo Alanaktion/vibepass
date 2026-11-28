@@ -80,6 +80,7 @@ export function EditView({ id, type, onSaved, onCancel }: Props) {
   const ctx = usePopup();
   const [draft, setDraft] = useState<ItemDraft | null>(null);
   const [revisionDate, setRevisionDate] = useState<string | undefined>(undefined);
+  const [restricted, setRestricted] = useState(false);
   const [organization, setOrganization] = useState<string | null>(null);
   const [folders, setFolders] = useState<FolderSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -110,6 +111,7 @@ export function EditView({ id, type, onSaved, onCancel }: Props) {
           }
           setDraft(item.draft);
           setRevisionDate(item.revisionDate);
+          setRestricted(Boolean(item.restricted));
           setOrganization(item.organization);
         },
         (e: unknown) => {
@@ -369,101 +371,105 @@ export function EditView({ id, type, onSaved, onCancel }: Props) {
               }}
             />
           </label>
-          <fieldset>
-            <legend>Custom fields</legend>
-            {draft.fields.map((field, i) =>
-              field.type === FieldType.Linked ? (
-                <p class="muted small" key={String(i)}>
-                  {field.name || 'Field'}: linked field, kept as is
-                </p>
-              ) : (
-                <div class="custom-field" key={String(i)}>
-                  <div class="row input-row">
-                    <input
-                      class="grow"
-                      value={field.name}
-                      aria-label={`Field ${String(i + 1)} name`}
-                      placeholder="Name"
-                      onInput={(e) => {
-                        changeField(i, { name: e.currentTarget.value });
-                      }}
-                    />
-                    <select
-                      value={String(field.type)}
-                      aria-label={`Field ${String(i + 1)} type`}
-                      onChange={(e) => {
-                        const picked = e.currentTarget.value;
-                        const next =
-                          FIELD_TYPES.find((t) => String(t.type) === picked)?.type ??
-                          FieldType.Text;
-                        changeField(i, {
-                          type: next,
-                          value:
-                            next === FieldType.Boolean
-                              ? field.value === 'true'
-                                ? 'true'
-                                : 'false'
-                              : field.value,
-                        });
-                      }}
-                    >
-                      {FIELD_TYPES.map((t) => (
-                        <option key={t.type} value={String(t.type)}>
-                          {t.label}
-                        </option>
-                      ))}
-                    </select>
-                    <IconButton
-                      icon={X}
-                      label={`Remove field ${String(i + 1)}`}
-                      onClick={() => {
-                        change((d) => ({ ...d, fields: d.fields.filter((_, j) => j !== i) }));
-                      }}
-                    />
-                  </div>
-                  {field.type === FieldType.Boolean ? (
-                    <label class="check">
+          {restricted ? (
+            <p>Login and custom fields are protected by your organization.</p>
+          ) : (
+            <fieldset>
+              <legend>Custom fields</legend>
+              {draft.fields.map((field, i) =>
+                field.type === FieldType.Linked ? (
+                  <p class="muted small" key={String(i)}>
+                    {field.name || 'Field'}: linked field, kept as is
+                  </p>
+                ) : (
+                  <div class="custom-field" key={String(i)}>
+                    <div class="row input-row">
                       <input
-                        type="checkbox"
-                        checked={field.value === 'true'}
-                        onChange={(e) => {
-                          changeField(i, { value: e.currentTarget.checked ? 'true' : 'false' });
+                        class="grow"
+                        value={field.name}
+                        aria-label={`Field ${String(i + 1)} name`}
+                        placeholder="Name"
+                        onInput={(e) => {
+                          changeField(i, { name: e.currentTarget.value });
                         }}
                       />
-                      {field.name || 'Value'}
-                    </label>
-                  ) : (
-                    <SecretInput
-                      class={field.type === FieldType.Hidden ? 'mono' : undefined}
-                      shown={field.type !== FieldType.Hidden}
-                      value={field.value}
-                      label={`Field ${String(i + 1)} value`}
-                      placeholder="Value"
-                      autocomplete="off"
-                      onValue={(value) => {
-                        changeField(i, { value });
-                      }}
-                    />
-                  )}
-                </div>
-              ),
-            )}
-            <button
-              type="button"
-              class="ghost add"
-              onClick={() => {
-                change((d) => ({
-                  ...d,
-                  fields: [
-                    ...d.fields,
-                    { name: '', value: '', type: FieldType.Text, linkedId: null },
-                  ],
-                }));
-              }}
-            >
-              <Plus size={14} aria-hidden="true" /> Add field
-            </button>
-          </fieldset>
+                      <select
+                        value={String(field.type)}
+                        aria-label={`Field ${String(i + 1)} type`}
+                        onChange={(e) => {
+                          const picked = e.currentTarget.value;
+                          const next =
+                            FIELD_TYPES.find((t) => String(t.type) === picked)?.type ??
+                            FieldType.Text;
+                          changeField(i, {
+                            type: next,
+                            value:
+                              next === FieldType.Boolean
+                                ? field.value === 'true'
+                                  ? 'true'
+                                  : 'false'
+                                : field.value,
+                          });
+                        }}
+                      >
+                        {FIELD_TYPES.map((t) => (
+                          <option key={t.type} value={String(t.type)}>
+                            {t.label}
+                          </option>
+                        ))}
+                      </select>
+                      <IconButton
+                        icon={X}
+                        label={`Remove field ${String(i + 1)}`}
+                        onClick={() => {
+                          change((d) => ({ ...d, fields: d.fields.filter((_, j) => j !== i) }));
+                        }}
+                      />
+                    </div>
+                    {field.type === FieldType.Boolean ? (
+                      <label class="check">
+                        <input
+                          type="checkbox"
+                          checked={field.value === 'true'}
+                          onChange={(e) => {
+                            changeField(i, { value: e.currentTarget.checked ? 'true' : 'false' });
+                          }}
+                        />
+                        {field.name || 'Value'}
+                      </label>
+                    ) : (
+                      <SecretInput
+                        class={field.type === FieldType.Hidden ? 'mono' : undefined}
+                        shown={field.type !== FieldType.Hidden}
+                        value={field.value}
+                        label={`Field ${String(i + 1)} value`}
+                        placeholder="Value"
+                        autocomplete="off"
+                        onValue={(value) => {
+                          changeField(i, { value });
+                        }}
+                      />
+                    )}
+                  </div>
+                ),
+              )}
+              <button
+                type="button"
+                class="ghost add"
+                onClick={() => {
+                  change((d) => ({
+                    ...d,
+                    fields: [
+                      ...d.fields,
+                      { name: '', value: '', type: FieldType.Text, linkedId: null },
+                    ],
+                  }));
+                }}
+              >
+                <Plus size={14} aria-hidden="true" /> Add field
+              </button>
+            </fieldset>
+          )}
           {
             <label>
               Folder

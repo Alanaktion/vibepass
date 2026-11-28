@@ -54,6 +54,7 @@ function createRequest(options: PublicKeyCredentialCreationOptions): PasskeyCrea
       displayName: options.user.displayName,
     },
     challenge: b64(options.challenge),
+    userVerification: selection?.userVerification ?? null,
     algorithms: options.pubKeyCredParams
       .filter((p) => (p.type as string) === 'public-key')
       .map((p) => p.alg),
