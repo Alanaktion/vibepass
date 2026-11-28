@@ -68,6 +68,12 @@ autofill, and a calm item view. Nothing to migrate.
   the browser restarts" can be turned off. Five wrong PINs in a row turn PIN unlock off until
   the next master password unlock, which turns it back on without asking for the PIN again.
   Optionally, the PIN also answers items with master password re-prompt.
+- **Touch ID and Windows Hello (Chrome and Edge):** Settings, "Unlock with Touch ID". Vibepass
+  makes a passkey on your device for its own extension (not a website) and uses its PRF output to
+  unlock, so it works without Bitwarden's desktop app. Unlocking opens a small window for the
+  browser's prompt. Needs macOS 15 or later, or Windows 11 with the February 2026 update.
+  Not offered in Firefox yet: it doesn't let extensions make passkeys for themselves
+  ([bug 1693562](https://bugzilla.mozilla.org/show_bug.cgi?id=1693562)).
 - **Passkeys:** when a site asks to sign in with a passkey and your vault has one for it
   (saved by Vibepass or any Bitwarden client), Vibepass shows its own prompt: pick the passkey,
   or choose "Use another device or security key" to get the browser's usual sheet. With editing
@@ -251,6 +257,7 @@ node scripts/dev/write-check.mjs http://127.0.0.1:8000 live@example.test
 node scripts/dev/passkey-check.mjs http://127.0.0.1:8000 live@example.test
 node scripts/dev/form-fill-check.mjs http://127.0.0.1:8000 live@example.test
 node scripts/dev/frame-fill-check.mjs http://127.0.0.1:8000 live@example.test
+node scripts/dev/biometric-check.mjs http://127.0.0.1:8000 live@example.test
 ```
 
 `form-fill-check.mjs` saves a card, a re-prompt card, and an identity, then fills them into

@@ -3,6 +3,7 @@ import { useState } from 'preact/hooks';
 import type { VaultStatus } from '../../shared/messages';
 import { sendMessage } from '../../shared/messaging';
 import { IconButton } from './IconButton';
+import { useBiometricSupport } from '../biometric';
 
 interface Props {
   status: VaultStatus;
@@ -16,6 +17,21 @@ export function LockScreen({ status, onStatus }: Props) {
   const [preferPin, setPreferPin] = useState(true);
   // Too many wrong PINs (or a browser restart) turns PIN unlock off until the master password.
   const usePin = status.pin.unlock && preferPin;
+  const biometric = useBiometricSupport();
+  const showBiometric = status.biometric && biometric.available;
+
+  async function unlockBiometric() {
+    setBusy(true);
+    setError(null);
+    try {
+      // Opens a window for the browser's prompt; the popup usually closes, then reopens unlocked.
+      onStatus(await sendMessage('biometric:unlock'));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unlock failed');
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function unlock(e: Event) {
     e.preventDefault();
@@ -41,6 +57,18 @@ export function LockScreen({ status, onStatus }: Props) {
     <main class="screen">
       <h1>Unlock</h1>
       {status.email && <p class="muted">{status.email}</p>}
+      {showBiometric && (
+        <div class="stack">
+          <button
+            type="button"
+            class="primary"
+            disabled={busy}
+            onClick={() => void unlockBiometric()}
+          >
+            Unlock with {biometric.label}
+          </button>
+        </div>
+      )}
       <form class="stack" onSubmit={(e) => void unlock(e)}>
         <label>
           {usePin ? 'PIN' : 'Master password'}
@@ -62,7 +90,11 @@ export function LockScreen({ status, onStatus }: Props) {
           </p>
         )}
         <button type="submit" disabled={busy || secret === ''}>
-          {busy ? 'Unlocking…' : 'Unlock'}
+          {busy
+            ? 'Unlocking…'
+            : showBiometric
+              ? `Unlock with ${usePin ? 'PIN' : 'password'}`
+              : 'Unlock'}
         </button>
         {status.pin.unlock && (
           <button

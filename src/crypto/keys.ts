@@ -145,3 +145,13 @@ export async function decryptUserKeyWithPin(
     throw new WrongPinError();
   }
 }
+
+/**
+ * Turn a WebAuthn PRF output into a wrapping key the way Bitwarden's clients do for passkey
+ * login (`createSymmetricKeyFromPrf`): HKDF-Expand the 32-byte output into an encryption half
+ * ("enc") and a MAC half ("mac").
+ */
+export async function keyFromPrf(prf: Uint8Array): Promise<SymmetricKey> {
+  if (prf.length !== 32) throw new Error('Unexpected PRF output');
+  return stretchMasterKey(prf);
+}

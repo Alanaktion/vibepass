@@ -8,6 +8,8 @@ import type { Handlers } from './router';
 import type { VaultService } from './service';
 import type { createAutofill } from './autofill';
 import type { createPasskeys } from './passkeys';
+import type { askBiometric } from './biometric';
+import { toBase64 } from '../crypto';
 
 export interface BackgroundContext {
   vault: VaultState;
@@ -22,6 +24,8 @@ export interface BackgroundContext {
   };
   /** Open the toolbar popup, for the inline menu's "unlock" row. */
   openPopup?: () => Promise<void>;
+  /** Run Touch ID or Windows Hello in an extension window (Chrome and Edge only). */
+  biometric?: typeof askBiometric;
   now?: () => number;
 }
 
@@ -65,6 +69,27 @@ export function createHandlers(ctx: BackgroundContext): Handlers {
     'pin:set': ({ pin, afterRestart, reprompt }) => service.setPin(pin, { afterRestart, reprompt }),
     'pin:options': (patch) => service.setPinOptions(patch),
     'pin:remove': () => service.removePin(),
+    'biometric:enroll': async () => {
+      const ask = need(ctx.biometric, 'Biometric unlock');
+      const salt = toBase64(crypto.getRandomValues(new Uint8Array(32)));
+      await ask({ mode: 'enroll', salt }, async ({ credentialId, prf }) => {
+        await service.enrollBiometric(credentialId, salt, prf);
+      });
+      // The popup closed when the window took focus; bring it back to show the result.
+      void ctx.openPopup?.().catch(() => undefined);
+      return service.status();
+    },
+    'biometric:unlock': async () => {
+      const ask = need(ctx.biometric, 'Biometric unlock');
+      const saved = await service.biometricRequest();
+      if (!saved) throw new Error('Biometric unlock is off. Unlock with your master password.');
+      await ask({ mode: 'unlock', ...saved }, async ({ credentialId, prf }) => {
+        await service.unlockWithBiometric(credentialId, prf);
+      });
+      void ctx.openPopup?.().catch(() => undefined);
+      return service.status();
+    },
+    'biometric:remove': () => service.removeBiometric(),
     'vault:lock': () => service.lock(),
     'vault:logout': () => service.logout(),
     'vault:sync': () => service.sync(),

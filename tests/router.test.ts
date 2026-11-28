@@ -105,6 +105,7 @@ describe('background router', () => {
         syncError: null,
         version: 0,
         pin: NO_PIN,
+        biometric: false,
       },
     });
   });

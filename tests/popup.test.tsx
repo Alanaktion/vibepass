@@ -21,6 +21,7 @@ const base: VaultStatus = {
   syncError: null,
   version: 1,
   pin: NO_PIN,
+  biometric: false,
 };
 
 const hit = (id: string, name: string, siteMatch: boolean): SearchHit => ({

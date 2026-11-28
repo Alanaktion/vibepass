@@ -12,7 +12,10 @@ import {
   decryptString,
   decryptUserKeyWithPassword,
   decryptUserKeyWithPin,
+  fromBase64,
+  keyFromPrf,
   protectUserKeyWithPin,
+  wrapKey,
   deriveLoginKeys,
   emailSalt,
   encryptString,
@@ -36,6 +39,7 @@ import {
   type VaultStatus,
 } from '../shared/messages';
 import type { PinDeps, PinEnvelope, PinRecord } from '../storage/pin';
+import type { BiometricDeps, BiometricRecord } from '../storage/biometric';
 import type { SearchIndex } from '../search';
 import type { CachedVault } from '../storage/vault-cache';
 import type { Account } from '../storage/account';
@@ -108,10 +112,15 @@ export interface ServiceDeps {
   };
   /** PIN unlock settings and the PIN-protected user key. */
   pin: PinDeps;
+  /** Biometric unlock: the user key wrapped with a platform passkey's PRF output. */
+  biometric: BiometricDeps;
   now(): number;
   /** Called whenever the status may have changed, so open popups can follow along. */
   onStatus?(status: VaultStatus): void;
 }
+
+/** Encrypted with the user key beside the biometric-wrapped key, to notice a rotated key. */
+const BIOMETRIC_CHECK = 'vibepass-biometric';
 
 /** Wrong PINs in a row before the PIN stops working until the master password is entered. */
 export const MAX_PIN_ATTEMPTS = 5;
@@ -161,6 +170,7 @@ export class VaultService {
   private pin: PinRecord | null = null;
   /** Whether the memory-only PIN envelope exists (PIN unlock until the browser restarts). */
   private pinInSession = false;
+  private biometric: BiometricRecord | null = null;
 
   constructor(
     private readonly vault: VaultState,
@@ -332,6 +342,88 @@ export class VaultService {
     } else {
       await this.sync();
     }
+  }
+
+  // --- Biometric unlock -------------------------------------------------------------------
+
+  /** What the biometric window needs to unlock: the saved passkey and its PRF input. */
+  async biometricRequest(): Promise<{ credentialId: string; salt: string } | null> {
+    await this.ready;
+    const record = this.biometric;
+    return record ? { credentialId: record.credentialId, salt: record.salt } : null;
+  }
+
+  /** Save the user key wrapped with the new platform passkey's PRF output. */
+  async enrollBiometric(credentialId: string, salt: string, prf: string): Promise<VaultStatus> {
+    await this.ready;
+    const account = this.vault.currentAccount;
+    const userKey = this.vault.key;
+    if (!account || !userKey) throw new CodedError('Vibepass is locked', 'locked');
+    const prfBytes = fromBase64(prf);
+    const wrapping = await keyFromPrf(prfBytes);
+    prfBytes.fill(0);
+    try {
+      const record: BiometricRecord = {
+        userId: account.userId,
+        credentialId,
+        salt,
+        protectedUserKey: await wrapKey(userKey, wrapping),
+        check: await encryptString(BIOMETRIC_CHECK, userKey),
+      };
+      this.assertKey(userKey);
+      await this.deps.biometric.save(record);
+      this.biometric = record;
+    } finally {
+      wrapping.fill(0);
+    }
+    this.vault.setBiometric(true);
+    this.notify();
+    return this.vault.status();
+  }
+
+  /** Unlock with the saved platform passkey's PRF output. */
+  async unlockWithBiometric(credentialId: string, prf: string): Promise<VaultStatus> {
+    await this.ready;
+    const account = this.vault.currentAccount;
+    const record = this.biometric;
+    if (!account) throw new Error('Log in first');
+    if (!record) throw new Error('Biometric unlock is off. Unlock with your master password.');
+    if (credentialId !== record.credentialId) {
+      throw new Error('That passkey isn’t the one Vibepass saved. Try again.');
+    }
+    const generation = ++this.generation;
+    const prfBytes = fromBase64(prf);
+    const wrapping = await keyFromPrf(prfBytes);
+    prfBytes.fill(0);
+    let userKey: SymmetricKey;
+    try {
+      userKey = await unwrapKey(record.protectedUserKey, wrapping);
+    } catch {
+      throw new Error('That didn’t unlock Vibepass. Try again, or use your master password.');
+    } finally {
+      wrapping.fill(0);
+    }
+    try {
+      await decryptString(record.check, userKey);
+    } catch {
+      userKey.fill(0);
+      await this.removeBiometric();
+      throw new Error(
+        'Your account keys changed, so biometric unlock was turned off. Unlock with your master password.',
+      );
+    }
+    this.checkGeneration(generation);
+    await this.openVault(userKey, account);
+    return this.vault.status();
+  }
+
+  async removeBiometric(): Promise<VaultStatus> {
+    await this.ready;
+    this.biometric = null;
+    await this.deps.biometric.clear();
+    this.vault.setBiometric(false);
+    this.notify();
+    return this.vault.status();
   }
 
   // --- PIN unlock -------------------------------------------------------------------------
@@ -574,6 +666,7 @@ export class VaultService {
       await this.deps.cache.clear(account.userId);
     }
     await this.removePin();
+    await this.removeBiometric();
     await this.deps.generator.clearHistory();
     await this.deps.account.clear();
     this.vault.setAccount(null);
@@ -1222,6 +1315,13 @@ export class VaultService {
       this.publishPin();
     } else if (pin) {
       await this.deps.pin.clear();
+    }
+    const biometric = await this.deps.biometric.load();
+    if (biometric && biometric.userId === account.userId) {
+      this.biometric = biometric;
+      this.vault.setBiometric(true);
+    } else if (biometric) {
+      await this.deps.biometric.clear();
     }
     const session = await this.deps.session.load();
     if (!session) return;

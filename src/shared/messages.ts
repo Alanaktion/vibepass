@@ -42,6 +42,8 @@ export interface VaultStatus {
   /** Changes whenever the vault's contents change (a sync or a save), so views reload. */
   version: number;
   pin: PinStatus;
+  /** Biometric unlock (Touch ID, Windows Hello) is set up for this account. */
+  biometric: boolean;
 }
 
 /** PIN unlock, as the popup needs to know it. Never holds the PIN or anything derived from it. */
@@ -210,6 +212,10 @@ export interface MessageMap {
   'pin:set': { request: { pin: string } & PinOptions; response: VaultStatus };
   'pin:options': { request: Partial<PinOptions>; response: VaultStatus };
   'pin:remove': { request: undefined; response: VaultStatus };
+  /** Opens a window for Touch ID or Windows Hello; answers once it is done or cancelled. */
+  'biometric:enroll': { request: undefined; response: VaultStatus };
+  'biometric:unlock': { request: undefined; response: VaultStatus };
+  'biometric:remove': { request: undefined; response: VaultStatus };
   'vault:logout': { request: undefined; response: VaultStatus };
   'vault:lock': { request: undefined; response: VaultStatus };
   'vault:sync': { request: undefined; response: VaultStatus };
@@ -333,6 +339,9 @@ const MESSAGE_TYPES: readonly MessageType[] = [
   'pin:set',
   'pin:options',
   'pin:remove',
+  'biometric:enroll',
+  'biometric:unlock',
+  'biometric:remove',
   'vault:logout',
   'vault:lock',
   'vault:sync',

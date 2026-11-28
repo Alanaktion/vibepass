@@ -11,6 +11,7 @@ import {
 import { errorMessage } from '../lib';
 import { IconButton } from './IconButton';
 import { PinSettings } from './PinSettings';
+import { BiometricSettings } from './BiometricSettings';
 
 interface Props {
   onBack: () => void;
@@ -84,6 +85,7 @@ export function SettingsView({ onBack, onSettings, onOpen }: Props) {
             />
             Lock when my computer locks or sleeps
           </label>
+          <BiometricSettings />
           <PinSettings />
           <label>
             Clear copied passwords after

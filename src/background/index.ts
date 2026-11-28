@@ -21,6 +21,8 @@ import {
 import { generatorStore } from '../storage/generator';
 import { sessionStore } from '../storage/session';
 import { pinStore } from '../storage/pin';
+import { biometricStore } from '../storage/biometric';
+import { askBiometric } from './biometric';
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type Settings } from '../storage/settings';
 import { vaultCache } from '../storage/vault-cache';
 import { VaultState } from '../vault/state';
@@ -53,6 +55,7 @@ const service = new VaultService(vault, search, {
   writesEnabled: async () => (await settings()).allowEdits,
   generator: generatorStore,
   pin: pinStore,
+  biometric: biometricStore,
   now: () => Date.now(),
   onStatus: (status) => {
     // A login waiting for the save banner must not outlive the unlocked vault.
@@ -149,6 +152,7 @@ const route = createRouter(
     clipboard,
     settings: { load: settings, save: saveSettings },
     openPopup: () => browser.action.openPopup(),
+    biometric: askBiometric,
   }),
   browser.runtime.id,
   browser.runtime.getURL(''),

@@ -32,6 +32,11 @@ export class VaultState {
   /** Bumped whenever the decrypted view changes, so open views know to reload. */
   private version = 0;
   private pinStatus: PinStatus = NO_PIN;
+  private biometric = false;
+
+  setBiometric(on: boolean): void {
+    this.biometric = on;
+  }
 
   /** The service keeps PIN unlock's state; the vault only reports it. */
   setPin(pin: PinStatus): void {
@@ -53,6 +58,7 @@ export class VaultState {
       syncError: this.userKey ? this.lastSyncError : null,
       version: this.version,
       pin: this.account ? this.pinStatus : NO_PIN,
+      biometric: this.account !== null && this.biometric,
     };
   }
 

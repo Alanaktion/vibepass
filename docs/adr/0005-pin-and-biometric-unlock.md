@@ -1,6 +1,6 @@
 # ADR 0005: PIN unlock now, biometric unlock later
 
-Date: 2026-11-28. Status: PIN accepted and built; biometrics proposed, not built.
+Date: 2026-11-28. Status: accepted. PIN built; biometrics built for Chrome and Edge.
 
 ## Context
 
@@ -54,6 +54,23 @@ an extension page, and use the PRF output to wrap the user key, the same way the
 - The popup closes when the browser's passkey sheet opens, so setup and unlock would run in an
   extension tab or window, as passkey verification already does.
 
-Recommendation: build biometrics as "Unlock with Touch ID / Windows Hello" for Chrome and Edge
-first, behind detection of PRF support, and add Firefox when bug 1693562 ships. Not built until
-Alan agrees.
+## Decision: biometrics (Alan agreed 2026-11-28)
+
+Built for Chrome and Edge; hidden on Firefox until bug 1693562 ships.
+
+- Setup and unlock run in an extension window (`src/popup/BiometricWindow.tsx`), opened by the
+  worker (`src/background/biometric.ts`), which talks to it over a port only that window URL can
+  open. The window makes a platform passkey with no RP id, so the browser binds it to the
+  extension's own origin (`chrome-extension://<id>`), which no website can use. User
+  verification is required.
+- The PRF output (with a random salt saved beside it) becomes a wrapping key the way Bitwarden's
+  passkey login does (`createSymmetricKeyFromPrf`: HKDF-Expand "enc" and "mac"), and wraps the
+  user key with the SDK. The wrapped key and a check value (to notice a rotated account key)
+  live in `storage.local`: without the device's secure hardware and a fingerprint or face, the
+  PRF output can't be had, so this survives restarts.
+- The popup offers it only where `isUserVerifyingPlatformAuthenticatorAvailable()` is true and
+  `getClientCapabilities()` doesn't rule out PRF. If create() doesn't return a PRF output, the
+  window asks once more with get().
+- Not yet: biometrics answering re-prompt; checking on a real Mac and Windows machine (the live
+  check uses Chrome's virtual authenticator, which can't copy a passkey's PRF secret, so a full
+  unlock with the right output is covered by unit tests).

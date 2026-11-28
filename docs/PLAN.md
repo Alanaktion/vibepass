@@ -374,9 +374,12 @@ Prioritized from beta feedback. Candidates from the spec:
     typed into a form.
 - PIN unlock: on main 2026-11-28 ([ADR 0005](adr/0005-pin-and-biometric-unlock.md)), with
   the PIN optionally answering master password re-prompt. Checked by `tests/pin.test.ts`.
-- Biometric unlock (Touch ID, Windows Hello) without Bitwarden's desktop app: researched in
-  ADR 0005, not built yet. WebAuthn PRF from the extension's own page looks possible in Chrome
-  on macOS and Windows, but Firefox doesn't yet accept an extension's own origin as the RP ID.
+- Biometric unlock (Touch ID, Windows Hello) without Bitwarden's desktop app: on main
+  2026-11-28 for Chrome and Edge (ADR 0005), a platform passkey's WebAuthn PRF output wraps the
+  user key. Hidden on Firefox until it accepts an extension's own origin as the RP ID (bug
+  1693562). Checked by `tests/biometric.test.ts` and `scripts/dev/biometric-check.mjs` (8 of 8
+  in Chromium with a virtual authenticator against Vaultwarden 1.37.5). Not yet: a check on a
+  real Mac and Windows machine, and biometrics answering re-prompt.
 - Attachment upload.
 - Edge (likely little work beyond the Chrome build) and Safari (a larger port; decide whether to
   support it at all).

@@ -6,6 +6,7 @@ import type { Account } from '../src/storage/account';
 import { DEFAULT_GENERATOR, type StoredGeneratorOptions } from '../src/storage/generator';
 import type { UnlockedSession } from '../src/storage/session';
 import type { PinEnvelope, PinRecord } from '../src/storage/pin';
+import type { BiometricRecord } from '../src/storage/biometric';
 import type { VaultState } from '../src/vault/state';
 import type { OfficialVaultFixture } from './fixtures';
 
@@ -257,6 +258,7 @@ export function memoryDeps(server?: FakeServer): ServiceDeps & {
     history: string[];
     pin: PinRecord | null;
     pinSession: PinEnvelope | null;
+    biometric: BiometricRecord | null;
   };
 } {
   const stored = {
@@ -269,6 +271,7 @@ export function memoryDeps(server?: FakeServer): ServiceDeps & {
     history: [] as string[],
     pin: null as PinRecord | null,
     pinSession: null as PinEnvelope | null,
+    biometric: null as BiometricRecord | null,
   };
   let now = Date.parse('2026-11-25T00:00:00Z');
   return {
@@ -358,6 +361,17 @@ export function memoryDeps(server?: FakeServer): ServiceDeps & {
       loadSession: () => Promise.resolve(stored.pinSession),
       saveSession: (envelope) => {
         stored.pinSession = envelope;
+        return Promise.resolve();
+      },
+    },
+    biometric: {
+      load: () => Promise.resolve(stored.biometric ? structuredClone(stored.biometric) : null),
+      save: (record) => {
+        stored.biometric = structuredClone(record);
+        return Promise.resolve();
+      },
+      clear: () => {
+        stored.biometric = null;
         return Promise.resolve();
       },
     },

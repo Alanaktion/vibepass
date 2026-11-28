@@ -166,6 +166,9 @@ These are not style preferences. A change that breaks one is a bug.
   encrypted with the user key; the PIN-wrapped user key stays in `storage.session` unless the
   user chose PIN unlock across restarts. Every PIN attempt is counted before the KDF runs, and
   after five wrong ones the PIN-wrapped key is deleted until the master password is entered.
+- Biometric unlock: WebAuthn runs only in Vibepass's own extension window, never the popup or a
+  page; the PRF output goes from that window to the worker over a port only it can open
+  (`src/background/biometric.ts`) and is never stored.
 - Passkeys: the page script holds no secrets and only relays; the worker takes the origin from
   the message sender, checks the RP id against it, and signs. Private keys never leave the
   worker. Only trusted clicks or keys in Vibepass's prompt pick or save a passkey.
@@ -236,6 +239,7 @@ node scripts/dev/write-check.mjs http://127.0.0.1:8000 live@example.test
 node scripts/dev/passkey-check.mjs http://127.0.0.1:8000 live@example.test
 node scripts/dev/form-fill-check.mjs http://127.0.0.1:8000 live@example.test
 node scripts/dev/frame-fill-check.mjs http://127.0.0.1:8000 live@example.test
+node scripts/dev/biometric-check.mjs http://127.0.0.1:8000 live@example.test
 ```
 
 See the README for the full Docker command. Vaultwarden rate-limits logins (about 10 a minute),
