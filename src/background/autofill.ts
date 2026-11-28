@@ -2,17 +2,24 @@
  * Autofill v1, worker side. A fill only starts from a user gesture (popup Enter, the fill
  * shortcut, or a trusted click or Enter in the page's inline menu). The worker checks which page
  * the tab is on, that the item is saved for it, and only then sends the username and password to
- * that tab's top frame, for that origin only.
+ * the frame the login form is in, for that frame's origin only. A login fills into a frame
+ * from another site only when the login is saved for that frame's site.
  *
  * Cards and identities have no URLs, so they fill into any page's payment or address form, on
  * the same gestures. A card only goes to a page with a secure connection unless the user
- * confirms in the popup.
+ * confirms in the popup. The form may be spread over frames (a payment provider's card fields,
+ * one field per frame on some checkouts): each visible https frame from the page's own site or
+ * a known payment provider gets the values for its own fields only, and a frame from any other
+ * site asks in the popup first.
  */
 import { CodedError } from '../shared/errors';
 import type {
+  CardFieldKey,
   CardFill,
   ContentRequest,
   FillResult,
+  FrameInfo,
+  IdentityFill,
   InlineMenuItem,
   InlineMenuState,
   PageInfo,
@@ -28,10 +35,11 @@ import { CipherType } from '../vault/types';
 import type { VaultState } from '../vault/state';
 import type { CipherSummary } from '../vault/types';
 import type { VaultService } from './service';
+import { isPaymentProvider } from './payment-frames';
 
 export interface TabsApi {
-  /** Message the tab's top frame content script. */
-  send(tabId: number, message: ContentRequest): Promise<unknown>;
+  /** Message a frame's content script: the top frame unless a frame id is given. */
+  send(tabId: number, message: ContentRequest, frameId?: number): Promise<unknown>;
   /** Inject the content script into a tab opened before the extension was installed. */
   inject(tabId: number): Promise<void>;
 }
@@ -59,6 +67,8 @@ export interface FillRequest {
   tabId: number;
   id: string;
   confirmedOrigin?: string | undefined;
+  /** Origins of frames from other sites the user agreed may receive this card or identity. */
+  confirmedFrames?: readonly string[] | undefined;
   masterPassword?: string | undefined;
   /** The popup's session, which may already have passed the re-prompt. */
   session?: string | undefined;
@@ -68,6 +78,51 @@ export function createAutofill(deps: AutofillDeps) {
   const now = deps.now ?? (() => Date.now());
   /** Last item filled per tab. Item ids only, never secrets. */
   const recent = new Map<number, { id: string; at: number }>();
+  /** Frames per tab that the top page can't reach and that have form fields. */
+  const frames = new Map<number, Set<number>>();
+
+  /** A frame with form fields registered (its content script runs in another origin). */
+  function frameReady(tabId: number, frameId: number): void {
+    if (frameId === 0) return;
+    let set = frames.get(tabId);
+    if (!set) {
+      set = new Set();
+      frames.set(tabId, set);
+    }
+    // A page that keeps making frames: forget the oldest.
+    if (set.size >= MAX_FRAMES) {
+      const oldest = set.values().next().value;
+      if (oldest !== undefined) set.delete(oldest);
+    }
+    set.add(frameId);
+  }
+
+  function tabClosed(tabId: number): void {
+    frames.delete(tabId);
+    recent.delete(tabId);
+    pending.delete(tabId);
+  }
+
+  /** Ask every registered frame of the tab what it holds. Gone frames are forgotten. */
+  async function inspectFrames(tabId: number): Promise<(FrameInfo & { frameId: number })[]> {
+    const ids = Array.from(frames.get(tabId) ?? []);
+    const answers = await Promise.all(
+      ids.map(async (frameId) => {
+        try {
+          const info = await deps.tabs.send(
+            tabId,
+            { source: 'vibepass', type: 'content:inspect' },
+            frameId,
+          );
+          return isFrameInfo(info) ? { ...info, frameId } : null;
+        } catch {
+          frames.get(tabId)?.delete(frameId);
+          return null;
+        }
+      }),
+    );
+    return answers.filter((a): a is FrameInfo & { frameId: number } => a !== null);
+  }
 
   function recentFor(tabId: number): string | null {
     const entry = recent.get(tabId);
@@ -120,9 +175,10 @@ export function createAutofill(deps: AutofillDeps) {
     );
   }
 
-  /** Fill a card or identity into the page's payment or address form. */
+  /** Fill a card or identity into the page's payment or address form, across its frames. */
   async function fillForm(request: FillRequest, summary: CipherSummary): Promise<FillResult> {
     const isCard = summary.type === CipherType.Card;
+    const what = isCard ? 'card' : 'address';
     const info = await inspect(request.tabId);
     const page = deps.search.pageFor(info.url);
     if (!page) throw new Error('Vibepass only fills web pages');
@@ -134,6 +190,49 @@ export function createAutofill(deps: AutofillDeps) {
         origin: page.url.origin,
       });
     }
+
+    const topHas = isCard ? info.fields.card : info.fields.identity;
+    const all = await inspectFrames(request.tabId);
+    const keysOf = (f: FrameInfo) => (isCard ? f.cardKeys : f.identityKeys);
+    // A frame with one field of a split form only counts when the tab has the whole form.
+    const tabIsForm =
+      topHas || all.some((f) => (isCard ? isCardForm(f.cardKeys) : f.identityKeys.length >= 2));
+    const targets: (FrameInfo & { frameId: number })[] = [];
+    const ask: string[] = [];
+    let hidden = false;
+    if (tabIsForm) {
+      for (const frame of all) {
+        if (keysOf(frame).length === 0) continue;
+        if (!frame.visible) {
+          hidden = true;
+          continue;
+        }
+        const framePage = parseUri(frame.url);
+        if (!framePage || !isSecurePage(framePage.url)) continue;
+        const origin = framePage.url.origin;
+        const trusted =
+          framePage.domain === page.domain ||
+          isPaymentProvider(framePage.domain) ||
+          request.confirmedFrames?.includes(origin) === true;
+        if (trusted) targets.push(frame);
+        else if (!ask.includes(origin)) ask.push(origin);
+      }
+    }
+    if (ask.length > 0) {
+      const hosts = ask.map((o) => new URL(o).host).join(', ');
+      throw new CodedError(
+        `This ${what} form is hosted by ${hosts}, not ${page.url.host}`,
+        'fill-mismatch',
+        { frames: ask },
+      );
+    }
+    // The page's own share of a card split over frames (the name on card, say).
+    const topSplit = isCard && !topHas && tabIsForm && (info.cardKeys?.length ?? 0) > 0;
+    // Hidden, covered, or scrolled out of view: the user should see where a card goes.
+    if (!topHas && !topSplit && targets.length === 0 && hidden) {
+      throw new Error(`The ${what} form isn’t visible. Scroll to it and try again.`);
+    }
+
     const { item } = await deps.service.fillData(request.id, {
       masterPassword: request.masterPassword,
       session: request.session,
@@ -149,15 +248,81 @@ export function createAutofill(deps: AutofillDeps) {
             code: item.card.code,
           }
         : null;
-    const result = (await deps.tabs.send(request.tabId, {
-      source: 'vibepass',
-      type: 'content:fill-form',
-      origin: page.url.origin,
-      card,
-      identity: isCard ? null : { ...item.identity },
-    })) as { filled?: unknown } | undefined;
-    const filled = Array.isArray(result?.filled) ? (result.filled as string[]) : [];
-    return { filled, copiedTotp: false };
+    const identity: IdentityFill | null = isCard ? null : { ...item.identity };
+
+    const sends: Promise<string[]>[] = [];
+    // The top page fills when it has the form, or when no frame does (it then says so).
+    if (topHas || topSplit || targets.length === 0) {
+      sends.push(
+        deps.tabs
+          .send(request.tabId, {
+            source: 'vibepass',
+            type: 'content:fill-form',
+            origin: page.url.origin,
+            card: card && topSplit ? cardFor(card, info.cardKeys ?? []) : card,
+            identity,
+            ...(topSplit ? { split: true } : {}),
+          })
+          .then(filledOf),
+      );
+    }
+    for (const frame of targets) {
+      const origin = new URL(frame.url).origin;
+      sends.push(
+        deps.tabs
+          .send(
+            request.tabId,
+            {
+              source: 'vibepass',
+              type: 'content:fill-form',
+              origin,
+              // Only the values for this frame's own fields: the number's frame never gets
+              // the security code.
+              card: card ? cardFor(card, frame.cardKeys) : null,
+              identity: identity ? identityFor(identity, frame.identityKeys) : null,
+            },
+            frame.frameId,
+          )
+          .then(filledOf),
+      );
+    }
+    const results = await Promise.allSettled(sends);
+    const filled = new Set<string>();
+    let failure: unknown = null;
+    for (const result of results) {
+      if (result.status === 'fulfilled') for (const key of result.value) filled.add(key);
+      else failure ??= result.reason;
+    }
+    if (filled.size === 0) {
+      if (failure instanceof Error) throw failure;
+      throw new Error(`No ${what} fields found on this page`);
+    }
+    return { filled: Array.from(filled), copiedTotp: false };
+  }
+
+  /**
+   * Which frame a login goes to: the one the user was typing in, else the top page if it has
+   * a login form, else a visible frame with one (one saved for this login first).
+   */
+  async function loginTarget(
+    tabId: number,
+    uris?: Parameters<typeof matchItem>[0],
+  ): Promise<{ frameId: number; url: string }> {
+    const top = await inspect(tabId);
+    const hasLogin = (f: PageInfo) => f.fields.username || f.fields.password || f.fields.totp;
+    const topTarget = { frameId: 0, url: top.url };
+    if (top.focused && hasLogin(top)) return topTarget;
+    const found = (await inspectFrames(tabId)).filter((f) => f.visible && hasLogin(f));
+    const focused = found.find((f) => f.focused);
+    if (focused) return focused;
+    if (hasLogin(top) || found.length === 0) return topTarget;
+    const saved =
+      uris &&
+      found.find((f) => {
+        const framePage = deps.search.pageFor(f.url);
+        return framePage !== null && matchItem(uris, framePage) !== MatchQuality.None;
+      });
+    return saved || (found[0] ?? topTarget);
   }
 
   async function fill(request: FillRequest): Promise<FillResult> {
@@ -170,8 +335,8 @@ export function createAutofill(deps: AutofillDeps) {
       throw new Error('Only logins, cards, and identities can be filled');
     }
 
-    const info = await inspect(request.tabId);
-    const page = deps.search.pageFor(info.url);
+    const target = await loginTarget(request.tabId, summary.uris);
+    const page = deps.search.pageFor(target.url);
     if (!page) throw new Error('Vibepass only fills web pages');
     if (request.confirmedOrigin !== undefined && request.confirmedOrigin !== page.url.origin) {
       throw new Error('The page changed. Start the fill again.');
@@ -197,15 +362,20 @@ export function createAutofill(deps: AutofillDeps) {
       masterPassword: request.masterPassword,
       session: request.session,
     });
-    const result = (await deps.tabs.send(request.tabId, {
-      source: 'vibepass',
-      type: 'content:fill',
-      origin: page.url.origin,
-      username: item.login?.username ?? null,
-      password: item.login?.password ?? null,
-      totp: totp?.code ?? null,
-    })) as { filled?: unknown } | undefined;
-    const filled = Array.isArray(result?.filled) ? (result.filled as string[]) : [];
+    const filled = filledOf(
+      await deps.tabs.send(
+        request.tabId,
+        {
+          source: 'vibepass',
+          type: 'content:fill',
+          origin: page.url.origin,
+          username: item.login?.username ?? null,
+          password: item.login?.password ?? null,
+          totp: totp?.code ?? null,
+        },
+        target.frameId,
+      ),
+    );
     if (filled.length > 0) {
       for (const [tab, entry] of recent) if (now() - entry.at > RECENT_FILL_MS) recent.delete(tab);
       recent.set(request.tabId, { id: request.id, at: now() });
@@ -225,8 +395,8 @@ export function createAutofill(deps: AutofillDeps) {
    */
   async function fillBest(tabId: number): Promise<boolean> {
     if (!deps.vault.isUnlocked) return false;
-    const info = await inspect(tabId);
-    const best = loginsFor(tabId, info.url)[0]?.hit;
+    const target = await loginTarget(tabId);
+    const best = loginsFor(tabId, target.url)[0]?.hit;
     if (!best || best.reprompt) return false;
     await fill({ tabId, id: best.id });
     return true;
@@ -427,11 +597,30 @@ export function createAutofill(deps: AutofillDeps) {
     return { message: 'Saved to Vibepass' };
   }
 
+  /** What the popup's suggestions go by: the kinds of fields on the page and its frames. */
+  async function inspectTab(tabId: number): Promise<PageInfo['fields']> {
+    const top = await inspect(tabId);
+    const all = await inspectFrames(tabId);
+    const fields = { ...top.fields };
+    for (const frame of all) {
+      if (!frame.visible) continue;
+      fields.username ||= frame.fields.username;
+      fields.password ||= frame.fields.password;
+      fields.totp ||= frame.fields.totp;
+      fields.card ||= isCardForm(frame.cardKeys);
+      fields.identity ||= frame.fields.identity;
+    }
+    return fields;
+  }
+
   return {
     fill,
     fillBest,
     fillFromMenu,
+    frameReady,
+    tabClosed,
     inspect,
+    inspectTab,
     menu,
     submitted,
     pendingPrompt,
@@ -439,4 +628,78 @@ export function createAutofill(deps: AutofillDeps) {
     answer,
     clearPending,
   };
+}
+
+/** Frames remembered per tab. */
+const MAX_FRAMES = 32;
+
+const CARD_FORM_KEYS: ReadonlySet<CardFieldKey> = new Set(['number', 'exp', 'expMonth', 'expYear']);
+
+/** A card form on its own: it has the number or expiry. */
+function isCardForm(keys: readonly CardFieldKey[]): boolean {
+  return keys.some((k) => CARD_FORM_KEYS.has(k));
+}
+
+function filledOf(result: unknown): string[] {
+  const filled = (result as { filled?: unknown } | undefined)?.filled;
+  return Array.isArray(filled) ? filled.filter((f): f is string => typeof f === 'string') : [];
+}
+
+function isFrameInfo(value: unknown): value is FrameInfo {
+  const info = value as Partial<FrameInfo> | null;
+  return (
+    typeof info === 'object' &&
+    info !== null &&
+    typeof info.url === 'string' &&
+    typeof info.fields === 'object' &&
+    Array.isArray(info.cardKeys) &&
+    Array.isArray(info.identityKeys)
+  );
+}
+
+/** The card's values for just these fields. */
+export function cardFor(card: CardFill, keys: readonly CardFieldKey[]): CardFill {
+  const has = (k: CardFieldKey) => keys.includes(k);
+  const exp = has('exp') || has('expMonth') || has('expYear');
+  return {
+    cardholderName: has('cardholderName') ? card.cardholderName : null,
+    brand: has('brand') ? card.brand : null,
+    number: has('number') ? card.number : null,
+    expMonth: exp ? card.expMonth : null,
+    expYear: exp ? card.expYear : null,
+    code: has('code') ? card.code : null,
+  };
+}
+
+/**
+ * Which identity values each address field the form detector knows is made from. Identity
+ * numbers (SSN, passport, licence) are never filled into a page, so they aren't here.
+ */
+const IDENTITY_SOURCES: Partial<Record<string, readonly (keyof IdentityFill)[]>> = {
+  title: ['title'],
+  fullName: ['title', 'firstName', 'middleName', 'lastName'],
+  firstName: ['firstName'],
+  middleName: ['middleName'],
+  lastName: ['lastName'],
+  email: ['email'],
+  phone: ['phone'],
+  company: ['company'],
+  address: ['address1', 'address2', 'address3'],
+  address1: ['address1'],
+  address2: ['address2'],
+  address3: ['address3'],
+  city: ['city'],
+  state: ['state'],
+  postalCode: ['postalCode'],
+  country: ['country'],
+  username: ['username'],
+};
+
+/** The identity's values for just these fields. */
+export function identityFor(identity: IdentityFill, keys: readonly string[]): IdentityFill {
+  const out: IdentityFill = {};
+  for (const key of keys) {
+    for (const source of IDENTITY_SOURCES[key] ?? []) out[source] = identity[source] ?? null;
+  }
+  return out;
 }

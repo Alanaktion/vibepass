@@ -33,12 +33,19 @@ autofill, and a calm item view. Nothing to migrate.
   code; or names, street, city, state, ZIP, country, email, and phone, matching drop-downs by
   name or code. On a checkout with shipping and billing addresses, only the section you're in
   is filled. Cards with master password re-prompt fill from the popup. Settings can turn cards
-  and identities off in the inline menu. Not yet: card fields inside a payment provider's
-  iframe (Stripe, Braintree, and Adyen usually put them there).
-- Vibepass only fills on your gesture, only into the page's top frame, and only for items saved
-  for that site. It asks before filling anything else, or an https login into an http page.
-  Cards and identities have no websites, so they fill into any page's form, but Vibepass asks
-  before filling a card into a page without a secure connection.
+  and identities off in the inline menu.
+- **Embedded forms:** card fields inside a payment provider's frame (Stripe, Braintree, Adyen,
+  Square, Shopify, and others) fill too, also when each field is its own frame. Each frame gets
+  only its own field: the card number's frame never sees the security code. Logins fill inside
+  a frame from another site when the login is saved for that site. Fill these from the popup or
+  the shortcut, or from the inline menu on a field of the page itself (the name on the card);
+  the inline menu doesn't open inside the frames yet.
+- Vibepass only fills on your gesture, and only for items saved for that site: for a login in
+  a frame, the frame's own site. It asks before filling anything else, or an https login into
+  an http page. Cards and identities have no websites, so they fill into any page's form, but
+  Vibepass asks before filling a card into a page without a secure connection, and before
+  filling a card or address into a frame from another site that isn't a known payment
+  provider. Frames that are hidden, see-through, or covered are never filled.
 - Copied secrets are cleared from the clipboard after 30 seconds, and the vault locks after 15
   minutes idle or when your computer locks. Both are in Settings (gear icon).
 - **Editing** (after turning it on in Settings): the + button starts a new login (for the current
@@ -230,10 +237,13 @@ node scripts/dev/inline-menu-check.mjs http://127.0.0.1:8000 live@example.test
 node scripts/dev/write-check.mjs http://127.0.0.1:8000 live@example.test
 node scripts/dev/passkey-check.mjs http://127.0.0.1:8000 live@example.test
 node scripts/dev/form-fill-check.mjs http://127.0.0.1:8000 live@example.test
+node scripts/dev/frame-fill-check.mjs http://127.0.0.1:8000 live@example.test
 ```
 
 `form-fill-check.mjs` saves a card, a re-prompt card, and an identity, then fills them into
-local checkout pages through the inline menu and the popup. `write-check.mjs` writes to the vault (create, edit, conflicts, folders, trash, the save banner)
+local checkout pages through the inline menu and the popup. `frame-fill-check.mjs` does the same
+with card fields and logins in frames from other origins, served over local https (it needs
+`openssl`). `write-check.mjs` writes to the vault (create, edit, conflicts, folders, trash, the save banner)
 and reads every write back with Bitwarden's own cipher code from a separate login.
 `passkey-check.mjs` makes and uses passkeys on a local test site (localhost:8091) that verifies
 them like a real one, and also writes. Run all three only against a throwaway test server.

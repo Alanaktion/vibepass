@@ -48,7 +48,10 @@ export function createManifest(browser, pkg) {
         matches: ['https://*/*', 'http://*/*'],
         js: ['content.js'],
         run_at: 'document_idle',
-        all_frames: false,
+        // Every frame, for payment providers' card fields and logins embedded from another
+        // site. Frames only report their fields and fill when the worker says
+        // (background/autofill.ts decides which frames may get what).
+        all_frames: true,
       },
       // Passkeys: the prompt, and a stand-in for navigator.credentials in the page's own world,
       // which must be in place before the page's scripts run.

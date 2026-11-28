@@ -80,25 +80,36 @@ export async function fillItem(ctx: PopupContext, id: string): Promise<boolean> 
     ctx.toast('Open a web page to fill');
     return false;
   }
-  const run = (confirmedOrigin?: string) =>
+  let confirmedOrigin: string | undefined;
+  let confirmedFrames: string[] | undefined;
+  const run = () =>
     withReprompt(ctx.askPassword, (masterPassword) =>
       sendMessage('autofill:fill', {
         tabId: tab.id,
         id,
         ...(confirmedOrigin === undefined ? {} : { confirmedOrigin }),
+        ...(confirmedFrames === undefined ? {} : { confirmedFrames }),
         ...pw(masterPassword),
       }),
     );
   try {
     let result;
-    try {
-      result = await run();
-    } catch (error) {
-      if (!isCodedError(error, 'fill-mismatch')) throw error;
-      const details = error.details as { origin?: unknown } | undefined;
-      if (typeof details?.origin !== 'string') throw error;
-      if (!(await ctx.confirm(`${error.message}. Fill anyway?`, 'Fill anyway'))) return false;
-      result = await run(details.origin);
+    // Up to two questions: an insecure page, then a form hosted by another site.
+    for (let attempt = 0; ; attempt++) {
+      try {
+        result = await run();
+        break;
+      } catch (error) {
+        if (!isCodedError(error, 'fill-mismatch') || attempt >= 2) throw error;
+        const details = error.details as { origin?: unknown; frames?: unknown } | undefined;
+        const frames = Array.isArray(details?.frames)
+          ? details.frames.filter((f): f is string => typeof f === 'string')
+          : [];
+        if (typeof details?.origin !== 'string' && frames.length === 0) throw error;
+        if (!(await ctx.confirm(`${error.message}. Fill anyway?`, 'Fill anyway'))) return false;
+        if (typeof details?.origin === 'string') confirmedOrigin = details.origin;
+        else confirmedFrames = [...(confirmedFrames ?? []), ...frames];
+      }
     }
     if (!result) return false;
     if (result.copiedTotp) {

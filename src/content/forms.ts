@@ -570,10 +570,20 @@ function nearStrongCardField(field: FormField): boolean {
   return false;
 }
 
-/** A field of a payment card form (one with a card number or expiry). */
+/**
+ * A field of a payment card form (one with a card number or expiry). On a page with frames,
+ * also a field the page tags as a card field (autocomplete "cc-name") next to card fields
+ * that live in a payment provider's frames.
+ */
 export function isCardFormField(field: FormField): boolean {
   if (fieldRole(field)?.form !== 'card') return false;
-  return Object.keys(findCardFields(field, field.ownerDocument).fields).length > 0;
+  const doc = field.ownerDocument;
+  return Object.keys(findCardFields(field, doc, hasFrames(doc)).fields).length > 0;
+}
+
+/** Whether part of a card form could be in frames: the page has any. */
+export function hasFrames(doc: Document = document): boolean {
+  return doc.querySelector('iframe') !== null;
 }
 
 // --- Finding the form to fill -------------------------------------------------------------
@@ -641,15 +651,34 @@ function scopeFor(
   return best;
 }
 
+/**
+ * The card fields to fill. Only a form with a card number or expiry is a card form, except with
+ * `split`: a payment provider's frame that holds one field of a card form laid out across
+ * several frames (just the security code, say). There only fields whose autocomplete token
+ * names the card field count, and the worker fills them only when another frame in the tab has
+ * the number or expiry.
+ */
 export function findCardFields(
   anchor: FormField | null = null,
   root: Document = document,
+  split = false,
 ): FoundFields<CardKey> {
   const scope = scopeFor(anchor, 'card', root);
   const fields = collect<CardKey>(usableFields(scope), 'card', null);
-  // Only a form with a card number or expiry is a card form.
   const strong = Object.keys(fields).some((k) => CARD_FORM_KEYS.has(k as CardKey));
-  return { fields: strong ? fields : {}, scope };
+  if (strong) return { fields, scope };
+  if (!split) return { fields: {}, scope };
+  const tokened: Partial<Record<CardKey, FormField>> = {};
+  for (const [key, field] of Object.entries(fields) as [CardKey, FormField][]) {
+    const token = autocompleteToken(field);
+    if (token && CARD_TOKENS[token] === key) tokened[key] = field;
+  }
+  return { fields: tokened, scope };
+}
+
+/** Whether these card fields make a card form on their own (a number or expiry). */
+export function isCardForm(keys: readonly CardKey[]): boolean {
+  return keys.some((k) => CARD_FORM_KEYS.has(k));
 }
 
 export function findIdentityFields(
@@ -965,8 +994,12 @@ function put(field: FormField, value: string | null | undefined, candidates?: st
 }
 
 /** Fill a card into the form around `anchor` (or the page's card form). Returns what was filled. */
-export function fillCard(card: CardFill, anchor: FormField | null = null): CardKey[] {
-  const { fields } = findCardFields(anchor);
+export function fillCard(
+  card: CardFill,
+  anchor: FormField | null = null,
+  split = false,
+): CardKey[] {
+  const { fields } = findCardFields(anchor, document, split);
   const filled: CardKey[] = [];
   const done = (key: CardKey, ok: boolean) => {
     if (ok) filled.push(key);

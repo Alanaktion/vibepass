@@ -18,6 +18,7 @@ export default defineConfig(
       'scripts/dev/write-check.mjs',
       'scripts/dev/passkey-check.mjs',
       'scripts/dev/form-fill-check.mjs',
+      'scripts/dev/frame-fill-check.mjs',
     ],
   },
   js.configs.recommended,

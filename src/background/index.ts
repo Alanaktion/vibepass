@@ -112,7 +112,7 @@ const autofill = createAutofill({
   settings,
   copy: (text) => clipboard.copy(text),
   tabs: {
-    send: (tabId, message) => browser.tabs.sendMessage(tabId, message, { frameId: 0 }),
+    send: (tabId, message, frameId = 0) => browser.tabs.sendMessage(tabId, message, { frameId }),
     inject: async (tabId) => {
       await browser.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
     },
@@ -155,6 +155,10 @@ const route = createRouter(
 // Listeners must be registered synchronously at the top level so an MV3 worker that is woken
 // by an event can receive it.
 browser.runtime.onMessage.addListener(route);
+// Frames registered for autofill belong to the tab; forget them with it.
+browser.tabs.onRemoved.addListener((tabId) => {
+  autofill.tabClosed(tabId);
+});
 listenForPopups(
   browser.runtime.onConnect,
   service.grants,

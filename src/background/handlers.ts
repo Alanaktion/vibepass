@@ -81,7 +81,7 @@ export function createHandlers(ctx: BackgroundContext): Handlers {
 
     'autofill:fill': (request) => need(ctx.autofill, 'Autofill').fill(request),
     'autofill:inspect': async ({ tabId }) => {
-      const { fields } = await need(ctx.autofill, 'Autofill').inspect(tabId);
+      const fields = await need(ctx.autofill, 'Autofill').inspectTab(tabId);
       // A content script from before an update may not report card and address forms.
       return {
         username: fields.username,
@@ -93,6 +93,15 @@ export function createHandlers(ctx: BackgroundContext): Handlers {
     },
     'autofill:page-ready': ({ loginForms }, sender) => {
       log.debug('page ready', { tabId: sender.tab?.id ?? -1, loginForms });
+      return undefined;
+    },
+    'autofill:frame-ready': (_request, sender) => {
+      const tabId = sender.tab?.id;
+      const frameId = sender.frameId;
+      if (tabId === undefined || frameId === undefined || frameId === 0) {
+        throw new Error('Untrusted sender');
+      }
+      need(ctx.autofill, 'Autofill').frameReady(tabId, frameId);
       return undefined;
     },
     'autofill:menu': async (_request, sender) => {

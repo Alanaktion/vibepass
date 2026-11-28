@@ -1,5 +1,5 @@
 /**
- * Content script (top frame only). Detects login fields, reports them to the worker, shows the
+ * Content script, top frame (frames run frame.ts instead). Detects login fields, reports them to the worker, shows the
  * inline menu on them, and fills them when the worker asks, which only happens after a user
  * gesture: the popup, the keyboard shortcut, or a trusted click or Enter in the inline menu.
  * It never holds secrets except for the moment of a fill.
@@ -9,6 +9,7 @@ import { isCodedError } from '../shared/errors';
 import { log } from '../shared/log';
 import {
   isContentRequest,
+  type CardFieldKey,
   type ContentRequest,
   type InlineMenuState,
   type PageInfo,
@@ -31,10 +32,13 @@ import {
   fieldRole,
   fillCard,
   fillIdentity,
+  findCardFields,
+  hasFrames,
   isCardFormField,
   isIdentityForm,
   pageForms,
 } from './forms';
+import { startFrame } from './frame';
 import { InlineMenu, type MenuRow } from './menu';
 
 export function countLoginForms(root: ParentNode = document): number {
@@ -44,8 +48,17 @@ export function countLoginForms(root: ParentNode = document): number {
 export function inspectPage(): PageInfo {
   const fields = detectLoginFields();
   const forms = pageForms();
+  const active = deepActiveElement();
   return {
     url: location.href,
+    focused:
+      active instanceof HTMLInputElement ||
+      active instanceof HTMLSelectElement ||
+      active instanceof HTMLTextAreaElement,
+    // Card fields tagged by the page, for a card form whose other fields are in frames.
+    cardKeys: hasFrames()
+      ? (Object.keys(findCardFields(null, document, true).fields) as CardFieldKey[])
+      : [],
     fields: {
       username: fields.username !== null,
       password: fields.password !== null,
@@ -69,7 +82,7 @@ export function fillFormPage(request: Extract<ContentRequest, { type: 'content:f
   let filled: string[] = [];
   filling = true;
   try {
-    if (request.card) filled = fillCard(request.card, anchor);
+    if (request.card) filled = fillCard(request.card, anchor, request.split === true);
     else if (request.identity) filled = fillIdentity(request.identity, anchor);
   } finally {
     filling = false;
@@ -277,9 +290,11 @@ async function pick(row: MenuRow): Promise<void> {
     });
     return;
   }
+  // Close first: the open menu can cover a payment provider's frame, which then counts as
+  // hidden and isn't filled.
+  menu.close();
   try {
     await sendMessage('autofill:menu-fill', { id: row.item.id });
-    menu.close();
   } catch (error) {
     const text = isCodedError(error, 'fill-mismatch')
       ? `${error.message}. Fill from the Vibepass button to continue.`
@@ -517,10 +532,15 @@ declare global {
 }
 
 function main(): void {
-  // Only the top frame; cross-origin iframes are refused by design. The flag stops a second
-  // copy when the worker injects the script into a tab that already has it.
-  if (window.top !== window || window.__vibepassContent) return;
+  // The flag stops a second copy when the worker injects the script into a tab that already
+  // has it.
+  if (window.__vibepassContent) return;
   window.__vibepassContent = true;
+  if (window.top !== window) {
+    // A frame only reports its fields and fills when the worker asks.
+    startFrame();
+    return;
+  }
   browser.runtime.onMessage.addListener(handle);
   startInlineMenu();
   startSaveBanner();

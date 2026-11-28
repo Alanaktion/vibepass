@@ -212,10 +212,21 @@ export interface MessageMap {
   'generator:history': { request: undefined; response: PasswordHistoryEntry[] };
   'generator:clear-history': { request: undefined; response: undefined };
   'autofill:fill': {
-    request: { tabId: number; id: string; confirmedOrigin?: string } & RepromptFields;
+    request: {
+      tabId: number;
+      id: string;
+      confirmedOrigin?: string;
+      /** Frames from other sites the user agreed may get this card or identity. */
+      confirmedFrames?: string[];
+    } & RepromptFields;
     response: FillResult;
   };
   'autofill:page-ready': { request: { url: string; loginForms: number }; response: undefined };
+  /**
+   * A frame (not the top one) has form fields, so the worker includes it when it inspects and
+   * fills the tab. Its origin comes from the sender, not the message.
+   */
+  'autofill:frame-ready': { request: undefined; response: undefined };
   /** Which kinds of fields the tab's page has, so the popup can suggest cards and identities. */
   'autofill:inspect': { request: { tabId: number }; response: PageInfo['fields'] };
   'autofill:menu': { request: undefined; response: InlineMenuState };
@@ -308,6 +319,7 @@ const MESSAGE_TYPES: readonly MessageType[] = [
   'generator:clear-history',
   'autofill:fill',
   'autofill:page-ready',
+  'autofill:frame-ready',
   'autofill:inspect',
   'autofill:menu',
   'autofill:menu-fill',
@@ -332,6 +344,7 @@ const MESSAGE_TYPES: readonly MessageType[] = [
  */
 const CONTENT_SCRIPT_ALLOWED: ReadonlySet<MessageType> = new Set<MessageType>([
   'autofill:page-ready',
+  'autofill:frame-ready',
   'autofill:menu',
   'autofill:menu-fill',
   'autofill:open-popup',
@@ -391,7 +404,10 @@ export interface CardFill {
 /** An identity's values for one fill. */
 export type IdentityFill = Partial<Record<IdentityFieldName, string | null>>;
 
-/** Worker -> content script, sent with tabs.sendMessage to the top frame only. */
+/**
+ * Worker -> content script, sent with tabs.sendMessage to one frame: the top frame, or a frame
+ * that registered with `autofill:frame-ready`.
+ */
 export type ContentRequest =
   | { source: 'vibepass'; type: 'content:inspect' }
   | {
@@ -401,6 +417,8 @@ export type ContentRequest =
       origin: string;
       card: CardFill | null;
       identity: IdentityFill | null;
+      /** Part of a card form split over frames: fill fields the page tags as card fields. */
+      split?: boolean;
     }
   | {
       source: 'vibepass';
@@ -416,6 +434,28 @@ export interface PageInfo {
   url: string;
   /** Login fields found on the page, and whether it has a card or address form. */
   fields: { username: boolean; password: boolean; totp: boolean; card: boolean; identity: boolean };
+  /**
+   * A form field in this document has focus (focus stays put when the popup opens), so this is
+   * the frame the user was typing in. False when focus is inside a child frame.
+   */
+  focused?: boolean;
+  /** Card fields the page tags with autocomplete, when its card form may be split over frames. */
+  cardKeys?: CardFieldKey[];
+}
+
+/** Card fields a frame can hold. */
+export type CardFieldKey =
+  'cardholderName' | 'number' | 'exp' | 'expMonth' | 'expYear' | 'code' | 'brand';
+
+/** What a frame other than the top one reports when the worker inspects the tab. */
+export interface FrameInfo extends PageInfo {
+  focused: boolean;
+  /** The frame is big enough to see and, where the browser can tell, not hidden or covered. */
+  visible: boolean;
+  /** Card fields in this frame. Each frame gets only the values for its own fields. */
+  cardKeys: CardFieldKey[];
+  /** Address fields in this frame, as the form detector names them ("fullName", "city"). */
+  identityKeys: string[];
 }
 
 export function isContentRequest(value: unknown): value is ContentRequest {

@@ -39,12 +39,16 @@ const CARD_CODE_HINT = /\b(cvv2?|cvc2?|csc|ccv)\b|card.?(code|verif|security)/i;
 const TOTP_HINT =
   /one.?time|otp|totp|2fa|mfa|two.?factor|verification.?code|auth(entication|enticator)?.?code|security.?code|sms.?code|passcode|token/i;
 
-/** Every input in the document, including open shadow roots and same-origin iframes. */
+/** Every input in the document, including open shadow roots. */
 export function allInputs(root: Document | ShadowRoot = document): HTMLInputElement[] {
   return allFields(root).filter((el): el is HTMLInputElement => el instanceof HTMLInputElement);
 }
 
-/** Every input, drop-down, and text area, in document order, through shadow roots and frames. */
+/**
+ * Every input, drop-down, and text area, in document order, through open shadow roots. Not
+ * into frames: each frame runs its own content script (frame.ts), because elements read from
+ * another frame belong to that frame's script world, where `instanceof` checks here fail.
+ */
 export function allFields(root: Document | ShadowRoot = document): FormField[] {
   const inputs: FormField[] = [];
   const visit = (node: Document | ShadowRoot | Element) => {
@@ -56,28 +60,10 @@ export function allFields(root: Document | ShadowRoot = document): FormField[] {
       )
         inputs.push(el);
       if (el.shadowRoot) visit(el.shadowRoot);
-      if (el instanceof HTMLIFrameElement) {
-        let doc: Document | null;
-        try {
-          // Same-origin frames only: reading a cross-origin frame throws or returns null.
-          doc = el.contentDocument;
-        } catch {
-          doc = null;
-        }
-        if (doc && sameOrigin(doc)) visit(doc);
-      }
     }
   };
   visit(root);
   return inputs;
-}
-
-function sameOrigin(doc: Document): boolean {
-  try {
-    return doc.location.origin === location.origin;
-  } catch {
-    return false;
-  }
 }
 
 function hints(input: HTMLInputElement): string {

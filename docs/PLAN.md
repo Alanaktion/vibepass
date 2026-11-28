@@ -173,7 +173,8 @@ implementation detail; the UI, search, autofill engine, and message protocol sta
 3. **TOTP.** Generate codes with a countdown; copy or fill on request.
 4. **Autofill v1** for standard single-page logins: field detection heuristics in the content
    script, fill on user gesture only (popup Enter or keyboard shortcut), matching by registrable
-   domain and port, refusing cross-origin iframes. Secrets go to the content script only at fill
+   domain and port, refusing cross-origin iframes (since 2026-11-28, frames fill under the rules
+   in [ADR 0004](adr/0004-frame-autofill.md)). Secrets go to the content script only at fill
    time.
 5. **Auto-lock and clipboard.** Lock on idle (`chrome.idle` / alarms), browser close, and system
    lock. Clear the clipboard after the configured timeout.
@@ -364,9 +365,13 @@ Prioritized from beta feedback. Candidates from the spec:
     localhost). Re-prompt items fill from the popup, with the once-per-popup grant.
   - Checked by `tests/forms.test.ts`, worker tests in `tests/autofill.test.ts`, and
     `scripts/dev/form-fill-check.mjs` (16 of 16 in Chromium against Vaultwarden 1.37.5).
-  - **Not yet:** card fields in cross-origin iframes (most hosted payment fields: Stripe
-    Elements, Braintree, Adyen), Firefox live testing, phone numbers split into parts, birth
-    dates, and saving a card or address typed into a form.
+  - **Frames (2026-11-28):** card and address fields in payment providers' frames, also one
+    field per frame, and logins embedded from another site
+    ([ADR 0004](adr/0004-frame-autofill.md)). Checked by `tests/frames.test.ts` and
+    `scripts/dev/frame-fill-check.mjs` (12 of 12 in Chromium against Vaultwarden 1.37.5).
+  - **Not yet:** the inline menu inside frames, the save banner for logins in frames, Firefox
+    live testing, phone numbers split into parts, birth dates, and saving a card or address
+    typed into a form.
 - Biometric or passkey unlock.
 - Attachment upload.
 - Edge (likely little work beyond the Chrome build) and Safari (a larger port; decide whether to

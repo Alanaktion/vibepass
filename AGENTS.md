@@ -64,7 +64,8 @@ src/
     router.ts    Typed dispatch; always replies { ok, data | error }; rejects other extensions
     handlers.ts  One thin handler per message type
     service.ts   VaultService: owns the order of operations (login, unlock, sync, lock, writes)
-    autofill.ts  Fill on gesture, and the save/update banner's decisions
+    autofill.ts  Fill on gesture (top page and frames), and the save/update banner's decisions
+    payment-frames.ts Payment providers whose frames may get a card without asking
     passkeys.ts  Passkey sign-in and save: origin checks, picking, signing
     reprompt.ts  Master password re-prompt, asked once per open popup
     autolock.ts  Idle and system-lock auto-lock
@@ -73,7 +74,8 @@ src/
                settings
   content/     Content script: field detection (detect.ts, with Bitwarden's heuristics in
                fields.ts and site maps in autocomplete.ts), card and address forms (forms.ts),
-               filling, inline menu (menu.ts), save
+               filling, frames (frame.ts: every frame reports and fills for itself),
+               inline menu (menu.ts), save
                banner (banner.ts); passkey prompt (passkey.ts, document start) and the
                page-world stand-in for navigator.credentials (webauthn-page.ts)
   data/        Published site data, refreshed by scripts/dev/update-site-data.mjs: Bitwarden's
@@ -90,7 +92,7 @@ scripts/
   build.mjs    One Vite build per entry point, then writes manifest.json per browser
   manifest.mjs Generates the Chrome and Firefox manifests
   dev/         Local Vaultwarden helpers: register, seed, live-check, inline-menu-check,
-               write-check, passkey-check, form-fill-check
+               write-check, passkey-check, form-fill-check, frame-fill-check
 tests/         Vitest (happy-dom) tests and fixtures
 docs/          PLAN.md (phased plan) and adr/ (architecture decisions)
 ```
@@ -144,8 +146,13 @@ These are not style preferences. A change that breaks one is a bug.
   `storage.session`. Never plaintext in `storage.local`, IndexedDB, or logs.
 - Popup and content scripts get decrypted values only on demand, for the one item the user acted
   on. The inline menu gets names and usernames, never secrets.
-- Autofill happens only on a user gesture, only in the tab's top frame, and only for items saved
-  for that site; anything else (mismatch, https item on an http page) asks first. Re-prompt items
+- Autofill happens only on a user gesture, and only for items saved for that site; anything
+  else (mismatch, https item on an http page) asks first. In frames
+  ([ADR 0004](docs/adr/0004-frame-autofill.md)): a login only where the frame's own origin
+  matches it; a card or address only into visible https frames from the page's own site or a
+  known payment provider (`src/background/payment-frames.ts`), others ask first; each frame
+  gets only the values for its own fields. The inline menu and save banner stay top-frame
+  only. Re-prompt items
   need the master password again, once per open popup: the worker keeps the grant in memory for
   that popup's port only (`src/background/reprompt.ts`) and drops it on close or lock. Content
   scripts can never hold one.
@@ -224,13 +231,14 @@ node scripts/dev/inline-menu-check.mjs http://127.0.0.1:8000 live@example.test
 node scripts/dev/write-check.mjs http://127.0.0.1:8000 live@example.test
 node scripts/dev/passkey-check.mjs http://127.0.0.1:8000 live@example.test
 node scripts/dev/form-fill-check.mjs http://127.0.0.1:8000 live@example.test
+node scripts/dev/frame-fill-check.mjs http://127.0.0.1:8000 live@example.test
 ```
 
 See the README for the full Docker command. Vaultwarden rate-limits logins (about 10 a minute),
 so wait between repeated runs (or start it with `-e LOGIN_RATELIMIT_MAX_BURST=1000`), and run
 with `NO_PROXY='*'` behind a proxy. Run the live checks for changes to login, sync, unlock,
 autofill, the inline menu, passkeys, or anything that writes (`write-check.mjs` and
-`passkey-check.mjs` and `form-fill-check.mjs` write to the vault, so only against a throwaway
+`passkey-check.mjs`, `form-fill-check.mjs`, and `frame-fill-check.mjs` write to the vault, so only against a throwaway
 server).
 
 ## Workflow
