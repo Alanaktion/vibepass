@@ -4,11 +4,18 @@ import type { VaultStatus } from '../shared/messages';
 import type { Settings } from '../storage/settings';
 import type { ActiveTab, AskPassword } from './lib';
 
+export interface PageForms {
+  card: boolean;
+  identity: boolean;
+}
+
 export interface PopupContext {
   status: VaultStatus;
   onStatus: (status: VaultStatus) => void;
   settings: Settings | null;
   tab: ActiveTab | null;
+  /** Card and address forms on the tab's page, once the page has answered. */
+  pageForms: PageForms | null;
   askPassword: AskPassword;
   confirm: (message: string, confirmLabel: string) => Promise<boolean>;
   toast: (message: string) => void;

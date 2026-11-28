@@ -26,8 +26,19 @@ autofill, and a calm item view. Nothing to migrate.
   Use the eye icon to reveal or hide it and the copy icon to copy a field.
 - **Fill without the popup:** Ctrl+Shift+L (⌘⇧L) fills the best match for the page. If the
   vault is locked or nothing matches, the popup opens instead.
+- **Cards and identities:** on a checkout or address form, the inline menu lists your cards
+  (on card fields) or identities (on name, address, and contact fields), and the popup puts them
+  first under "Suggested for this form". Enter fills the whole form you're in: card number,
+  name, expiry (drop-downs or one MM/YY box, in the format the field asks for), and security
+  code; or names, street, city, state, ZIP, country, email, and phone, matching drop-downs by
+  name or code. On a checkout with shipping and billing addresses, only the section you're in
+  is filled. Cards with master password re-prompt fill from the popup. Settings can turn cards
+  and identities off in the inline menu. Not yet: card fields inside a payment provider's
+  iframe (Stripe, Braintree, and Adyen usually put them there).
 - Vibepass only fills on your gesture, only into the page's top frame, and only for items saved
   for that site. It asks before filling anything else, or an https login into an http page.
+  Cards and identities have no websites, so they fill into any page's form, but Vibepass asks
+  before filling a card into a page without a secure connection.
 - Copied secrets are cleared from the clipboard after 30 seconds, and the vault locks after 15
   minutes idle or when your computer locks. Both are in Settings (gear icon).
 - **Editing** (after turning it on in Settings): the + button starts a new login (for the current
@@ -218,12 +229,14 @@ node scripts/dev/live-check.mjs http://127.0.0.1:8000 live@example.test
 node scripts/dev/inline-menu-check.mjs http://127.0.0.1:8000 live@example.test
 node scripts/dev/write-check.mjs http://127.0.0.1:8000 live@example.test
 node scripts/dev/passkey-check.mjs http://127.0.0.1:8000 live@example.test
+node scripts/dev/form-fill-check.mjs http://127.0.0.1:8000 live@example.test
 ```
 
-`write-check.mjs` writes to the vault (create, edit, conflicts, folders, trash, the save banner)
+`form-fill-check.mjs` saves a card, a re-prompt card, and an identity, then fills them into
+local checkout pages through the inline menu and the popup. `write-check.mjs` writes to the vault (create, edit, conflicts, folders, trash, the save banner)
 and reads every write back with Bitwarden's own cipher code from a separate login.
 `passkey-check.mjs` makes and uses passkeys on a local test site (localhost:8091) that verifies
-them like a real one, and also writes. Run both only against a throwaway test server.
+them like a real one, and also writes. Run all three only against a throwaway test server.
 
 Vaultwarden rate-limits logins (10 a minute by default), so wait a minute between repeated runs.
 

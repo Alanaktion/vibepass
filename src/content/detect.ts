@@ -8,6 +8,7 @@ import {
   fieldAutocomplete as autocomplete,
   restoreBrowserAutocomplete,
   suppressBrowserAutocomplete,
+  type FormField,
 } from './autocomplete';
 import {
   hasAccountCreationKeyword,
@@ -21,6 +22,7 @@ import {
   isNonLoginForm,
   isRecoveryCodeField,
 } from './fields';
+import { isCardFormField } from './forms';
 
 export { restoreBrowserAutocomplete, suppressBrowserAutocomplete };
 
@@ -33,15 +35,26 @@ export interface LoginFields {
 const TEXT_TYPES = new Set(['text', 'email', 'tel', '']);
 const USERNAME_HINT = /user|e-?mail|login|account|ident|member|customer|handle|nick|uid/i;
 const NOT_USERNAME_HINT = /search|captcha|coupon|promo|zip|postal|otp|totp|2fa|mfa|code|token/i;
+const CARD_CODE_HINT = /\b(cvv2?|cvc2?|csc|ccv)\b|card.?(code|verif|security)/i;
 const TOTP_HINT =
   /one.?time|otp|totp|2fa|mfa|two.?factor|verification.?code|auth(entication|enticator)?.?code|security.?code|sms.?code|passcode|token/i;
 
 /** Every input in the document, including open shadow roots and same-origin iframes. */
 export function allInputs(root: Document | ShadowRoot = document): HTMLInputElement[] {
-  const inputs: HTMLInputElement[] = [];
+  return allFields(root).filter((el): el is HTMLInputElement => el instanceof HTMLInputElement);
+}
+
+/** Every input, drop-down, and text area, in document order, through shadow roots and frames. */
+export function allFields(root: Document | ShadowRoot = document): FormField[] {
+  const inputs: FormField[] = [];
   const visit = (node: Document | ShadowRoot | Element) => {
     for (const el of Array.from(node.querySelectorAll('*'))) {
-      if (el instanceof HTMLInputElement) inputs.push(el);
+      if (
+        el instanceof HTMLInputElement ||
+        el instanceof HTMLSelectElement ||
+        el instanceof HTMLTextAreaElement
+      )
+        inputs.push(el);
       if (el.shadowRoot) visit(el.shadowRoot);
       if (el instanceof HTMLIFrameElement) {
         let doc: Document | null;
@@ -80,8 +93,9 @@ function hints(input: HTMLInputElement): string {
 }
 
 /** Visible and editable. Layout checks only apply when the page actually has a layout. */
-export function isUsable(input: HTMLInputElement): boolean {
-  if (input.disabled || input.readOnly || input.type === 'hidden') return false;
+export function isUsable(input: FormField): boolean {
+  if (input.disabled || input.type === 'hidden') return false;
+  if (!(input instanceof HTMLSelectElement) && input.readOnly) return false;
   if (input.hidden || input.closest('[hidden],[aria-hidden="true"]')) return false;
   const view = input.ownerDocument.defaultView;
   const style = view?.getComputedStyle(input);
@@ -99,7 +113,7 @@ export function isUsable(input: HTMLInputElement): boolean {
 }
 
 /** A field's autocomplete value as detection reads it (site map role, else the page's), lowercased. */
-export function fieldAutocomplete(input: HTMLInputElement): string {
+export function fieldAutocomplete(input: FormField): string {
   return autocomplete(input);
 }
 
@@ -131,7 +145,10 @@ function visibleNames(input: HTMLInputElement): string[] {
 
 export function isTotpField(input: HTMLInputElement): boolean {
   if (!TEXT_TYPES.has(input.type) && input.type !== 'number') return false;
-  if (autocomplete(input).includes('one-time-code')) return true;
+  const ac = autocomplete(input);
+  if (ac.includes('one-time-code')) return true;
+  // A card's security code ("Security code", "CVC") is never a one-time password.
+  if (/\bcc-/.test(ac) || CARD_CODE_HINT.test(hints(input)) || isCardFormField(input)) return false;
   // Backup and recovery codes look the same, but a TOTP would burn the user's attempt.
   if (isRecoveryCodeField(input) || isIgnoredField(input)) return false;
   const maxLength = input.maxLength;
@@ -236,13 +253,20 @@ function soleFieldUnderLoginHeading(candidates: HTMLInputElement[]): HTMLInputEl
 
 /**
  * Set a value the way typing would, so frameworks (React, Vue, Angular) see it: the native value
- * setter, then input and change events.
+ * setter, then input and change events. Works for inputs, text areas, and drop-downs (pass an
+ * option's value).
  */
-export function fillInput(input: HTMLInputElement, value: string): void {
+export function fillInput(input: FormField, value: string): void {
   input.focus();
   // The prototype's setter bypasses frameworks' own value tracking, so they notice the change.
+  const proto =
+    input instanceof HTMLSelectElement
+      ? HTMLSelectElement.prototype
+      : input instanceof HTMLTextAreaElement
+        ? HTMLTextAreaElement.prototype
+        : HTMLInputElement.prototype;
   // eslint-disable-next-line @typescript-eslint/unbound-method
-  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+  const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
   if (setter) setter.call(input, value);
   else input.value = value;
   input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));

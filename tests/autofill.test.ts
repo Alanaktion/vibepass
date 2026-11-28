@@ -7,6 +7,7 @@ import { VaultState } from '../src/vault/state';
 import { CipherType } from '../src/vault/types';
 import { officialVaults } from './fixtures';
 import { createTestService, fakeServer } from './helpers';
+import { newDraft } from '../src/vault/draft';
 
 const fixture = officialVaults.pbkdf2;
 const loginId = fixture.sync.ciphers.find((c) => c.type === CipherType.Login)!.id;
@@ -47,6 +48,31 @@ async function setup(
     ...(now ? { now } : {}),
   });
   return { autofill, sent, copy, tabs, service };
+}
+
+/** Save a card and an identity into the test vault (they have no URLs). */
+async function addCardAndIdentity(
+  service: Awaited<ReturnType<typeof setup>>['service'],
+  reprompt = false,
+) {
+  const card = newDraft(CipherType.Card);
+  card.name = 'Travel card';
+  card.reprompt = reprompt;
+  card.card = {
+    cardholderName: 'Alice Example',
+    brand: 'Visa',
+    number: '4111111111111111',
+    expMonth: '4',
+    expYear: '2031',
+    code: '123',
+  };
+  const identity = newDraft(CipherType.Identity);
+  identity.name = 'Home';
+  identity.identity = { ...identity.identity!, firstName: 'Alice', city: 'Springfield' };
+  return {
+    cardId: await service.saveItem({ id: null, draft: card }),
+    identityId: await service.saveItem({ id: null, draft: identity }),
+  };
 }
 
 describe('autofill', () => {
@@ -120,6 +146,8 @@ describe('autofill', () => {
       ],
       canGenerate: true,
       offerToSave: false,
+      cards: [],
+      identities: [],
     });
     expect(JSON.stringify(state)).not.toContain(loginItem.password);
     expect(await autofill.menu(7, 'https://other.test/')).toMatchObject({ items: [] });
@@ -258,6 +286,89 @@ describe('autofill', () => {
       await autofill.submitted(7, other, login);
       await service.lock();
       expect(autofill.pendingPrompt(7, other)).toBeNull();
+    });
+  });
+
+  describe('cards and identities', () => {
+    it('fills a card into any secure page, with its values, in the page’s origin', async () => {
+      const { autofill, sent, service } = await setup('https://shop.test/checkout', {
+        username: false,
+        password: false,
+        totp: false,
+      });
+      const { cardId } = await addCardAndIdentity(service);
+      await autofill.fill({ tabId: 7, id: cardId });
+      expect(sent.find((m) => m.type === 'content:fill-form')).toEqual({
+        source: 'vibepass',
+        type: 'content:fill-form',
+        origin: 'https://shop.test',
+        card: {
+          cardholderName: 'Alice Example',
+          brand: 'Visa',
+          number: '4111111111111111',
+          expMonth: '4',
+          expYear: '2031',
+          code: '123',
+        },
+        identity: null,
+      });
+    });
+
+    it('asks before sending a card to a page without a secure connection', async () => {
+      const { autofill, sent, service } = await setup('http://shop.test/checkout');
+      const { cardId, identityId } = await addCardAndIdentity(service);
+      await expect(autofill.fill({ tabId: 7, id: cardId })).rejects.toMatchObject({
+        code: 'fill-mismatch',
+        details: { origin: 'http://shop.test' },
+      });
+      expect(sent.some((m) => m.type === 'content:fill-form')).toBe(false);
+      await autofill.fill({ tabId: 7, id: cardId, confirmedOrigin: 'http://shop.test' });
+      expect(sent.filter((m) => m.type === 'content:fill-form')).toHaveLength(1);
+      // An address isn't payment data: it fills without asking.
+      await autofill.fill({ tabId: 7, id: identityId });
+      expect(sent.filter((m) => m.type === 'content:fill-form').at(-1)).toMatchObject({
+        card: null,
+        identity: { firstName: 'Alice', city: 'Springfield' },
+      });
+    });
+
+    it('lets a local development server take a card', async () => {
+      const { autofill, service } = await setup('http://localhost:3000/pay');
+      const { cardId } = await addCardAndIdentity(service);
+      await expect(autofill.fill({ tabId: 7, id: cardId })).resolves.toMatchObject({});
+    });
+
+    it('lists cards and identities for the inline menu, without their secrets', async () => {
+      const { autofill, service } = await setup('https://shop.test/');
+      const { cardId, identityId } = await addCardAndIdentity(service);
+      const state = await autofill.menu(7, 'https://shop.test/checkout');
+      expect(state).toMatchObject({
+        cards: [{ id: cardId, name: 'Travel card', type: 'card', reprompt: false }],
+        identities: [{ id: identityId, name: 'Home', type: 'identity' }],
+      });
+      const text = JSON.stringify(state);
+      expect(text).not.toContain('4111111111111111');
+      expect(text).not.toContain('"123"');
+      const off = await setup('https://shop.test/', undefined, {
+        ...DEFAULT_SETTINGS,
+        inlineMenuCards: false,
+      });
+      await addCardAndIdentity(off.service);
+      expect(await off.autofill.menu(7, 'https://shop.test/')).not.toHaveProperty('cards');
+    });
+
+    it('sends re-prompt cards to the popup from the inline menu', async () => {
+      const { autofill, sent, service } = await setup('https://shop.test/checkout');
+      const { cardId } = await addCardAndIdentity(service, true);
+      await expect(autofill.fillFromMenu(7, cardId)).rejects.toMatchObject({
+        code: 'reprompt-required',
+        message: 'Open Vibepass to fill this card',
+      });
+      // The popup without the master password is refused too.
+      await expect(autofill.fill({ tabId: 7, id: cardId })).rejects.toMatchObject({
+        code: 'reprompt-required',
+      });
+      expect(sent.some((m) => m.type === 'content:fill-form')).toBe(false);
     });
   });
 });

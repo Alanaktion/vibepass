@@ -3,7 +3,7 @@ import browser from '../shared/browser';
 import { isStatusEvent, type VaultStatus } from '../shared/messages';
 import { sendMessage } from '../shared/messaging';
 import type { Settings } from '../storage/settings';
-import { Ctx, type PopupContext } from './context';
+import { Ctx, type PageForms, type PopupContext } from './context';
 import { Dialog, Toast, type DialogRequest } from './components/Dialogs';
 import { EditView } from './components/EditView';
 import { FoldersView } from './components/FoldersView';
@@ -33,6 +33,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [tab, setTab] = useState<ActiveTab | null>(null);
+  const [pageForms, setPageForms] = useState<PageForms | null>(null);
   const [view, setView] = useState<View>({ kind: 'list' });
   const [showTour, setShowTour] = useState(false);
   const [query, setQuery] = useState('');
@@ -55,6 +56,22 @@ export function App() {
       browser.runtime.onMessage.removeListener(listener);
     };
   }, []);
+
+  // Ask the page once it's unlocked whether it has a card or address form to suggest items for.
+  const unlocked = status?.state === 'unlocked';
+  useEffect(() => {
+    if (!unlocked || !tab?.url) return;
+    let cancelled = false;
+    sendMessage('autofill:inspect', { tabId: tab.id }).then(
+      ({ card, identity }) => {
+        if (!cancelled) setPageForms({ card, identity });
+      },
+      () => undefined,
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [unlocked, tab]);
 
   useEffect(() => {
     if (status && status.state !== 'unlocked') {
@@ -92,6 +109,7 @@ export function App() {
         onStatus: setStatus,
         settings,
         tab,
+        pageForms,
         toast: showToast,
         askPassword,
         confirm: (message, confirmLabel) =>
@@ -99,7 +117,7 @@ export function App() {
             setDialog({ kind: 'confirm', message, confirmLabel, resolve });
           }),
       },
-    [status, settings, tab, showToast, askPassword],
+    [status, settings, tab, pageForms, showToast, askPassword],
   );
 
   const back = useCallback(() => {

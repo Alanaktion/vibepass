@@ -14,6 +14,8 @@ export interface Settings {
   autoCopyTotp: boolean;
   /** Show a menu of matching logins under login fields on web pages. */
   inlineMenu: boolean;
+  /** In the inline menu, also offer cards on payment forms and identities on address forms. */
+  inlineMenuCards: boolean;
   /**
    * Let Vibepass change the vault: create, edit, organize, and delete items. Off by default
    * while write support is new (Phase 2 gate).
@@ -36,6 +38,7 @@ export const DEFAULT_SETTINGS: Settings = {
   useServerIcons: false,
   autoCopyTotp: true,
   inlineMenu: true,
+  inlineMenuCards: true,
   allowEdits: false,
   offerToSave: true,
   passkeys: true,

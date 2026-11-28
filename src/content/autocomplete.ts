@@ -29,14 +29,53 @@ interface HostEntry extends PageEntry {
   pathnames?: Record<string, PageEntry | null>;
 }
 
+/** A form control detection reads: text boxes, drop-downs (expiry, country), text areas. */
+export type FormField = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+
 /** Map field keys to the autocomplete token detection already understands. */
 const FIELD_TOKENS: Partial<Record<string, string>> = {
   username: 'username',
-  email: 'username',
+  email: 'email',
   password: 'current-password',
   newPassword: 'new-password',
   oneTimeCode: 'one-time-code',
+  // Address, identity, and payment card forms: the HTML autofill tokens for the same data.
+  fullName: 'name',
+  honorificPrefix: 'honorific-prefix',
+  firstName: 'given-name',
+  middleName: 'additional-name',
+  lastName: 'family-name',
+  phone: 'tel',
+  organization: 'organization',
+  streetAddress: 'street-address',
+  addressLine1: 'address-line1',
+  addressLine2: 'address-line2',
+  addressLine3: 'address-line3',
+  addressLevel1: 'address-level1',
+  addressLevel2: 'address-level2',
+  postalCode: 'postal-code',
+  country: 'country',
+  cardholderName: 'cc-name',
+  cardNumber: 'cc-number',
+  cardExpirationDate: 'cc-exp',
+  cardExpirationMonth: 'cc-exp-month',
+  cardExpirationYear: 'cc-exp-year',
+  cardCvv: 'cc-csc',
+  cardType: 'cc-type',
 };
+
+/** On sign-in and sign-up forms the email is the account name. */
+const ACCOUNT_CATEGORIES = new Set([
+  'account-login',
+  'account-creation',
+  'account-update',
+  'account-recovery',
+]);
+
+function tokenFor(category: string, key: string): string | undefined {
+  if (key === 'email' && ACCOUNT_CATEGORIES.has(category)) return 'username';
+  return FIELD_TOKENS[key];
+}
 
 /**
  * The forms that describe a URL, by the map's precedence: page fragment, page forms, site-wide
@@ -107,7 +146,7 @@ function rulesFor(href: string): { selector: string; token: string }[] {
     for (const map of [patches as FormsMap, upstream as FormsMap]) {
       for (const form of formsFor(map, url)) {
         for (const [key, selectors] of Object.entries(form.fields)) {
-          const token = FIELD_TOKENS[key];
+          const token = tokenFor(form.category, key);
           if (!token || !selectors) continue;
           // Sequences (one digit per box) aren't filled yet; plain selectors are.
           for (const selector of selectors) {
@@ -125,10 +164,10 @@ function rulesFor(href: string): { selector: string; token: string }[] {
  * Fields the map named once keep that role, so the role survives the inline menu turning the
  * page's own autocomplete attribute off (which a map selector may test for).
  */
-const mapped = new WeakMap<HTMLInputElement, string>();
+const mapped = new WeakMap<FormField, string>();
 
 /** The autocomplete token the site map gives this field, or null when the map doesn't name it. */
-export function mapAutocomplete(input: HTMLInputElement): string | null {
+export function mapAutocomplete(input: FormField): string | null {
   const known = mapped.get(input);
   if (known) return known;
   // Map entries describe the page the user sees: the top frame's URL, also for same-origin
@@ -155,10 +194,10 @@ export function mapAutocomplete(input: HTMLInputElement): string | null {
  * The page's own autocomplete value, from before the inline menu turned the browser's form
  * history off on that field, so detection sees what the page meant.
  */
-const originalAutocomplete = new WeakMap<HTMLInputElement, string | null>();
+const originalAutocomplete = new WeakMap<FormField, string | null>();
 
 /** A field's autocomplete value as detection should read it, lowercased. */
-export function fieldAutocomplete(input: HTMLInputElement): string {
+export function fieldAutocomplete(input: FormField): string {
   const fromMap = mapAutocomplete(input);
   if (fromMap) return fromMap;
   const original = originalAutocomplete.has(input)

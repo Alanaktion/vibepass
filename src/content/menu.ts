@@ -1,5 +1,6 @@
 /**
- * The inline menu: a short list of matching logins under a focused login field. It lives in a
+ * The inline menu: a short list of matching logins under a focused login field, or of cards and
+ * identities under a payment or address field. It lives in a
  * closed shadow root, so the page can't read or restyle it, and in the top layer (a manual
  * popover) where the browser supports it, so page modals don't cover it. It never holds
  * secrets: rows carry names and usernames, and a pick asks the worker to fill.
@@ -10,7 +11,7 @@ import type { InlineMenuItem } from '../shared/messages';
 
 export type MenuRow =
   | { kind: 'item'; item: InlineMenuItem }
-  | { kind: 'unlock' }
+  | { kind: 'unlock'; what?: 'card' | 'identity' }
   | { kind: 'generate' }
   | { kind: 'message'; text: string };
 
@@ -144,8 +145,23 @@ function avatar(row: MenuRow): string {
   return '';
 }
 
+/** What the rows are, for the search box and screen readers: "login", "card", or "identity". */
+function nounOf(rows: readonly MenuRow[]): { one: string; many: string } {
+  for (const row of rows) {
+    if (row.kind !== 'item') continue;
+    if (row.item.type === 'card') return { one: 'card', many: 'cards' };
+    if (row.item.type === 'identity') return { one: 'identity', many: 'identities' };
+    break;
+  }
+  return { one: 'login', many: 'logins' };
+}
+
 function rowLabel(row: MenuRow): { name: string; sub: string | null } {
-  if (row.kind === 'unlock') return { name: 'Unlock Vibepass', sub: 'to fill a login here' };
+  if (row.kind === 'unlock') {
+    const what =
+      row.what === 'card' ? 'a card' : row.what === 'identity' ? 'an address' : 'a login';
+    return { name: 'Unlock Vibepass', sub: `to fill ${what} here` };
+  }
   if (row.kind === 'generate') {
     return { name: 'Use a strong password', sub: 'Vibepass makes one and remembers it' };
   }
@@ -167,6 +183,7 @@ export class InlineMenu {
   private allRows: MenuRow[] = [];
   private announcement: HTMLElement | null = null;
   private rows: MenuRow[] = [];
+  private noun = { one: 'login', many: 'logins' };
   private active = -1;
   private frame = 0;
   anchor: HTMLInputElement | null = null;
@@ -185,7 +202,13 @@ export class InlineMenu {
     if (this.anchor !== anchor) this.close();
     this.anchor = anchor;
     this.allRows = rows;
+    if (rows.some((row) => row.kind === 'item')) this.noun = nounOf(rows);
     if (!this.host) this.mount();
+    if (this.search) {
+      this.search.placeholder = `Search ${this.noun.many}`;
+      this.search.setAttribute('aria-label', `Search these ${this.noun.many}`);
+    }
+    this.list?.setAttribute('aria-label', `Vibepass ${this.noun.many}`);
     if (this.search && this.head) {
       // Search only makes sense over logins; an unlock or generate row gets a plain header.
       const searchable = rows.some((row) => row.kind === 'item');
@@ -215,6 +238,7 @@ export class InlineMenu {
     this.root = null;
     this.allRows = [];
     this.rows = [];
+    this.noun = { one: 'login', many: 'logins' };
     this.active = -1;
     this.anchor = null;
   }
@@ -239,7 +263,9 @@ export class InlineMenu {
               row.item.username?.toLowerCase().includes(query)),
         )
       : this.allRows;
-    if (!this.rows.length) this.rows = [{ kind: 'message', text: 'No matching logins' }];
+    if (!this.rows.length) {
+      this.rows = [{ kind: 'message', text: `No matching ${this.noun.many}` }];
+    }
     this.active = -1;
     this.render();
   }
@@ -395,7 +421,7 @@ export class InlineMenu {
     const summary =
       only && only.kind !== 'item'
         ? rowLabel(only).name
-        : `${String(count)} saved ${count === 1 ? 'login' : 'logins'}`;
+        : `${String(count)} saved ${count === 1 ? this.noun.one : this.noun.many}`;
     const spoken = description
       ? `${description}, ${String(this.active + 1)} of ${String(count)}`
       : `Vibepass. ${summary}.${count ? ' Use arrow keys to choose.' : ''}`;

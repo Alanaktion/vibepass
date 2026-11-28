@@ -219,7 +219,7 @@ implementation detail; the UI, search, autofill engine, and message protocol sta
 >   `tests/encrypt.test.ts`, both directions, keeping unknown card fields. Master password
 >   re-prompt is now asked once per open popup (`src/background/reprompt.ts`).
 >   `write-check.mjs` passed 23 of 23 against Vaultwarden 1.37.5 with the new card, identity,
->   and re-prompt steps. Not yet: autofill for payment and address forms.
+>   and re-prompt steps. Form fill for cards and identities followed on 2026-11-28 (below).
 > - The editing setting stays off by default until Alan's 2-week lifecycle trial.
 
 ### Gate before any write
@@ -347,8 +347,26 @@ Prioritized from beta feedback. Candidates from the spec:
   - **Not yet:** Firefox live testing, conditional (autofill) requests and passkeys in the
     inline menu, cross-origin iframes, re-prompt items, removing a passkey in the editor,
     related origins, and a check against real sites and self-hosted Bitwarden.
-- Autofill for payment and address forms (cards and identities can already be created and
-  edited).
+- **Autofill for payment and address forms (2026-11-28):** cards fill into card fields and
+  identities into address and contact forms, from the inline menu or the popup ("Suggested for
+  this form").
+  - Detection (`src/content/forms.ts`): the page's autocomplete tokens, then Map the Web's
+    address and payment-card maps, then Bitwarden's card and identity keyword lists. Changes
+    from Bitwarden: words of four letters or fewer must be whole words ("tel" isn't "hotel"); a
+    bare "Name" or "Number" is the cardholder or card number only beside other card fields; a
+    fill stays in the user's form, and in one section (shipping or billing). A card's
+    "Security code" is never taken for a one-time password.
+  - Filling: drop-downs by value or text (months by number or name, two- or four-digit years,
+    states and provinces by name or code, countries by name or ISO code via
+    `Intl.DisplayNames`); one expiry box follows its format hint (MM/YY, MM/YYYY, YY-MM).
+  - Rules: cards and identities have no URLs, so they fill into any page, on the usual gestures
+    and top frame only. A card asks first on a page without a secure connection (https or
+    localhost). Re-prompt items fill from the popup, with the once-per-popup grant.
+  - Checked by `tests/forms.test.ts`, worker tests in `tests/autofill.test.ts`, and
+    `scripts/dev/form-fill-check.mjs` (16 of 16 in Chromium against Vaultwarden 1.37.5).
+  - **Not yet:** card fields in cross-origin iframes (most hosted payment fields: Stripe
+    Elements, Braintree, Adyen), Firefox live testing, phone numbers split into parts, birth
+    dates, and saving a card or address typed into a form.
 - Biometric or passkey unlock.
 - Attachment upload.
 - Edge (likely little work beyond the Chrome build) and Safari (a larger port; decide whether to

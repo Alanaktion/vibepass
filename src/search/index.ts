@@ -8,11 +8,16 @@
 import MiniSearch from 'minisearch';
 import { clearMatchCache, matchScore, parseUri, savedDomain } from '../vault/match';
 import { sharedCredentialDomains } from '../vault/site-data';
-import type { CipherSummary, SearchHit } from '../vault/types';
+import type { CipherSummary, CipherType, SearchHit } from '../vault/types';
 
 export interface SearchOptions {
   /** The page the user is on; its matches rank first. */
   url?: string;
+  /**
+   * Item types the page has a form for (cards on a checkout page). With no query, they come
+   * first, as suggestions for the form.
+   */
+  formTypes?: readonly CipherType[];
   limit?: number;
 }
 
@@ -25,6 +30,8 @@ export interface SearchIndex {
   search(query: string, options?: SearchOptions): SearchHit[];
   /** Items saved for a page, best match first. Used by autofill. */
   matchesFor(url: string, includeEquivalents?: boolean): SearchHit[];
+  /** Every item of a type, favorites first, then by name. Cards and identities for autofill. */
+  ofType(type: CipherType): CipherSummary[];
   pageFor(url: string): ReturnType<typeof parseUri>;
   clear(): void;
 }
@@ -134,6 +141,7 @@ export function createSearchIndex(): SearchIndex {
       const page = options.url ? pageFor(options.url) : null;
       const needle = query.trim();
 
+      const formTypes = needle === '' ? (options.formTypes ?? []) : [];
       let scored: { item: CipherSummary; score: number }[];
       if (needle === '') {
         // No query: site matches, then favorites, then everything, alphabetically.
@@ -148,17 +156,18 @@ export function createSearchIndex(): SearchIndex {
 
       const ranked = scored.map(({ item, score }) => {
         const site = rank(item, page);
-        return { item, score, site: site > 0 ? site : sharedRank(item, page) };
+        const form = formTypes.includes(item.type) ? 1 : 0;
+        return { item, score, form, site: site > 0 ? site : sharedRank(item, page) };
       });
-      // Stable sort: site match quality first, then relevance (or favorites, with no query).
-      ranked.sort((a, b) => b.site - a.site || b.score - a.score);
-      return ranked
-        .slice(0, limit)
-        .map(({ item, site }) =>
-          site === SHARED_SITE
-            ? { ...item, siteMatch: false, sharedSite: true }
-            : { ...item, siteMatch: site > 0 },
-        );
+      // Stable sort: suggestions for the page's form, then site match quality, then relevance
+      // (or favorites, with no query).
+      ranked.sort((a, b) => b.form - a.form || b.site - a.site || b.score - a.score);
+      return ranked.slice(0, limit).map(({ item, site, form }): SearchHit => {
+        if (form) return { ...item, siteMatch: false, formMatch: true };
+        return site === SHARED_SITE
+          ? { ...item, siteMatch: false, sharedSite: true }
+          : { ...item, siteMatch: site > 0 };
+      });
     },
 
     matchesFor(url, includeEquivalents = false) {
@@ -169,6 +178,12 @@ export function createSearchIndex(): SearchIndex {
         .filter(({ site }) => site > 0)
         .sort((a, b) => b.site - a.site)
         .map(({ item }) => ({ ...item, siteMatch: true }));
+    },
+
+    ofType(type) {
+      return ordered
+        .filter((item) => item.type === type)
+        .sort((a, b) => Number(b.favorite) - Number(a.favorite) || a.name.localeCompare(b.name));
     },
 
     clear() {

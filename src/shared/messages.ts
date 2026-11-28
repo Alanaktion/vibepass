@@ -11,8 +11,10 @@ import type { Settings } from '../storage/settings';
 import type { TotpCode } from '../vault/totp';
 import type {
   CipherDetail,
+  CipherType,
   EditableItem,
   FolderSummary,
+  IdentityFieldName,
   ItemDraft,
   PasswordHistoryEntry,
   SearchHit,
@@ -61,7 +63,7 @@ export interface RepromptFields {
 }
 
 export interface FillResult {
-  /** Which fields were filled: 'username', 'password', 'totp'. */
+  /** Which fields were filled: 'username', 'password', 'totp', or card and identity keys. */
   filled: string[];
   /** The one-time password was copied because the page had no field for it. */
   copiedTotp: boolean;
@@ -76,6 +78,8 @@ export interface InlineMenuItem {
   reprompt: boolean;
   /** Filled in this tab a moment ago: the next step of a multi-step login. */
   recent: boolean;
+  /** A card or identity row; logins leave it out. */
+  type?: 'card' | 'identity';
 }
 
 /** What the inline menu on a page's login fields should show. */
@@ -87,6 +91,9 @@ export type InlineMenuState =
       items: InlineMenuItem[];
       /** Offer a generated password on new-password fields. */
       canGenerate?: boolean;
+      /** Cards and identities, for payment and address forms (any site: they have no URLs). */
+      cards?: InlineMenuItem[];
+      identities?: InlineMenuItem[];
       /** Offer to save submitted logins (editing and saving are turned on). */
       offerToSave?: boolean;
     };
@@ -171,7 +178,11 @@ export interface MessageMap {
   'vault:logout': { request: undefined; response: VaultStatus };
   'vault:lock': { request: undefined; response: VaultStatus };
   'vault:sync': { request: undefined; response: VaultStatus };
-  'vault:search': { request: { query: string; url?: string }; response: SearchHit[] };
+  'vault:search': {
+    /** `formTypes`: the page has a card or address form, so those items come first. */
+    request: { query: string; url?: string; formTypes?: CipherType[] };
+    response: SearchHit[];
+  };
   'vault:item': { request: { id: string } & RepromptFields; response: CipherDetail };
   'vault:reveal': { request: { id: string; fieldId: string } & RepromptFields; response: string };
   'vault:totp': { request: { id: string } & RepromptFields; response: TotpCode };
@@ -205,6 +216,8 @@ export interface MessageMap {
     response: FillResult;
   };
   'autofill:page-ready': { request: { url: string; loginForms: number }; response: undefined };
+  /** Which kinds of fields the tab's page has, so the popup can suggest cards and identities. */
+  'autofill:inspect': { request: { tabId: number }; response: PageInfo['fields'] };
   'autofill:menu': { request: undefined; response: InlineMenuState };
   'autofill:menu-fill': { request: { id: string }; response: FillResult };
   'autofill:open-popup': { request: undefined; response: undefined };
@@ -295,6 +308,7 @@ const MESSAGE_TYPES: readonly MessageType[] = [
   'generator:clear-history',
   'autofill:fill',
   'autofill:page-ready',
+  'autofill:inspect',
   'autofill:menu',
   'autofill:menu-fill',
   'autofill:open-popup',
@@ -363,9 +377,31 @@ export function isStatusEvent(value: unknown): value is StatusEvent {
   return candidate?.source === 'vibepass' && candidate.type === 'event:status';
 }
 
+/** A card's values for one fill. Lives for that fill only. */
+export interface CardFill {
+  cardholderName: string | null;
+  brand: string | null;
+  number: string | null;
+  /** "1" to "12". */
+  expMonth: string | null;
+  expYear: string | null;
+  code: string | null;
+}
+
+/** An identity's values for one fill. */
+export type IdentityFill = Partial<Record<IdentityFieldName, string | null>>;
+
 /** Worker -> content script, sent with tabs.sendMessage to the top frame only. */
 export type ContentRequest =
   | { source: 'vibepass'; type: 'content:inspect' }
+  | {
+      source: 'vibepass';
+      type: 'content:fill-form';
+      /** The origin the worker checked; the content script refuses others. */
+      origin: string;
+      card: CardFill | null;
+      identity: IdentityFill | null;
+    }
   | {
       source: 'vibepass';
       type: 'content:fill';
@@ -378,15 +414,17 @@ export type ContentRequest =
 
 export interface PageInfo {
   url: string;
-  /** Login fields found on the page. */
-  fields: { username: boolean; password: boolean; totp: boolean };
+  /** Login fields found on the page, and whether it has a card or address form. */
+  fields: { username: boolean; password: boolean; totp: boolean; card: boolean; identity: boolean };
 }
 
 export function isContentRequest(value: unknown): value is ContentRequest {
   const candidate = value as Partial<ContentRequest> | null;
   return (
     candidate?.source === 'vibepass' &&
-    (candidate.type === 'content:inspect' || candidate.type === 'content:fill')
+    (candidate.type === 'content:inspect' ||
+      candidate.type === 'content:fill' ||
+      candidate.type === 'content:fill-form')
   );
 }
 

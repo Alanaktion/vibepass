@@ -1,4 +1,5 @@
 import browser from '../shared/browser';
+import { CipherType } from '../vault/types';
 import { isCodedError } from '../shared/errors';
 import { sendMessage } from '../shared/messaging';
 
@@ -24,6 +25,22 @@ export function hasMod(event: KeyboardEvent): boolean {
 }
 
 export const modLabel = () => (isMac() ? '⌘' : 'Ctrl+');
+
+/**
+ * Whether the popup fills this item into the tab's page: logins on any web page (the worker
+ * checks the site), cards and identities when the page has a form for them.
+ */
+export function canFillItem(
+  type: CipherType,
+  tab: ActiveTab | null,
+  forms: { card: boolean; identity: boolean } | null,
+): boolean {
+  if (!tab?.url) return false;
+  if (type === CipherType.Login) return true;
+  if (type === CipherType.Card) return forms?.card === true;
+  if (type === CipherType.Identity) return forms?.identity === true;
+  return false;
+}
 
 export interface ActiveTab {
   id: number;

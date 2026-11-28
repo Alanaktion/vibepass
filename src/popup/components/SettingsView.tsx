@@ -121,6 +121,17 @@ export function SettingsView({ onBack, onSettings, onOpen }: Props) {
           <label class="check">
             <input
               type="checkbox"
+              checked={settings.inlineMenuCards}
+              disabled={!settings.inlineMenu}
+              onChange={(e) => {
+                save({ inlineMenuCards: e.currentTarget.checked });
+              }}
+            />
+            Also offer cards on payment forms and identities on address forms
+          </label>
+          <label class="check">
+            <input
+              type="checkbox"
               checked={builtIn === 'off-by-us' || builtIn === 'off'}
               disabled={builtIn === 'locked' || builtIn === 'other-extension' || builtIn === 'off'}
               onChange={(e) => {

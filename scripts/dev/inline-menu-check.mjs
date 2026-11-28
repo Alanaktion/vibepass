@@ -157,7 +157,8 @@ try {
   await site.goto('http://127.0.0.1:8090/multi');
   await site.click('#u');
   box = await menuBox(site);
-  await site.mouse.click(box.x + 40, box.y + 34);
+  // Below the search row, on the first login.
+  await site.mouse.click(box.x + 40, box.y + 56);
   await site.waitForFunction(() => /** @type {any} */ (window).seen.u);
   check('click fills the username step', (await seen(site)).u === 'alice@example.test');
   await site.click('#next');

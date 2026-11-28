@@ -4,8 +4,9 @@
  * without reverse-engineering each one:
  *
  * - Bitwarden's Map the Web forms map (GPL-3.0): curated CSS selectors for login, sign-up and
- *   password-change fields on sites whose markup hides them. Only the login-related forms and
- *   fields are kept, because the content script loads this on every page.
+ *   password-change fields on sites whose markup hides them, plus address and payment card
+ *   forms. Only the forms and fields Vibepass fills are kept, because the content script loads
+ *   this on every page.
  * - Apple's password-manager-resources (MIT): password rules for sites that don't declare
  *   `passwordrules`, and groups of sites that share one account.
  *
@@ -22,14 +23,45 @@ const DATA = fileURLToPath(new URL('../../src/data/', import.meta.url));
 const MAP_RELEASE = 'https://github.com/bitwarden/map-the-web/releases/latest/download/';
 const APPLE_REPO = 'apple/password-manager-resources';
 
-/** Form categories and field keys that a login filler acts on. */
+/** Form categories and field keys that the login, card, and identity fillers act on. */
 const CATEGORIES = new Set([
   'account-login',
   'account-creation',
   'account-update',
   'account-recovery',
+  'address',
+  'identity',
+  'payment-card',
 ]);
-const FIELDS = new Set(['username', 'email', 'password', 'newPassword', 'oneTimeCode']);
+const FIELDS = new Set([
+  'username',
+  'email',
+  'password',
+  'newPassword',
+  'oneTimeCode',
+  'fullName',
+  'honorificPrefix',
+  'firstName',
+  'middleName',
+  'lastName',
+  'phone',
+  'organization',
+  'streetAddress',
+  'addressLine1',
+  'addressLine2',
+  'addressLine3',
+  'addressLevel1',
+  'addressLevel2',
+  'postalCode',
+  'country',
+  'cardholderName',
+  'cardNumber',
+  'cardExpirationDate',
+  'cardExpirationMonth',
+  'cardExpirationYear',
+  'cardCvv',
+  'cardType',
+]);
 
 /**
  * @param {string} url

@@ -108,7 +108,13 @@ describe('content script', () => {
     );
     expect(browser.runtime.onMessage.addListener).toHaveBeenCalled();
 
-    expect(inspectPage().fields).toEqual({ username: true, password: true, totp: false });
+    expect(inspectPage().fields).toEqual({
+      username: true,
+      password: true,
+      totp: false,
+      card: false,
+      identity: false,
+    });
 
     const request = {
       source: 'vibepass' as const,

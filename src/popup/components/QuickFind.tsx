@@ -7,7 +7,7 @@ import { displayHost } from '../../vault/uri';
 import { CipherType, type SearchHit } from '../../vault/types';
 import { copyField, fillItem } from '../actions';
 import { usePopup } from '../context';
-import { hasMod, iconUrl, modLabel } from '../lib';
+import { canFillItem, hasMod, iconUrl, modLabel } from '../lib';
 import { ItemIcon } from './Dialogs';
 import { IconButton } from './IconButton';
 import { NewItemMenu } from './NewItemMenu';
@@ -39,7 +39,7 @@ const TYPE_LABEL: Record<CipherType, string> = {
  */
 export function QuickFind({ onOpen, onSettings, onNew, onGenerator, query, onQuery }: Props) {
   const ctx = usePopup();
-  const { status, tab, settings } = ctx;
+  const { status, tab, settings, pageForms } = ctx;
   const [results, setResults] = useState<SearchHit[]>([]);
   const [selected, setSelected] = useState(0);
   const listRef = useRef<HTMLUListElement>(null);
@@ -47,7 +47,15 @@ export function QuickFind({ onOpen, onSettings, onNew, onGenerator, query, onQue
 
   useEffect(() => {
     let cancelled = false;
-    const request = tab?.url ? { query, url: tab.url } : { query };
+    const formTypes = [
+      ...(pageForms?.card ? [CipherType.Card] : []),
+      ...(pageForms?.identity ? [CipherType.Identity] : []),
+    ];
+    const request = {
+      query,
+      ...(tab?.url ? { url: tab.url } : {}),
+      ...(formTypes.length ? { formTypes } : {}),
+    };
     sendMessage('vault:search', request).then(
       (items) => {
         if (cancelled) return;
@@ -62,7 +70,7 @@ export function QuickFind({ onOpen, onSettings, onNew, onGenerator, query, onQue
       cancelled = true;
     };
     // Re-run when a sync changes the vault, not only when the query changes.
-  }, [query, tab?.url, status.version]);
+  }, [query, tab?.url, status.version, pageForms?.card, pageForms?.identity]);
 
   useEffect(() => {
     listRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
@@ -70,8 +78,10 @@ export function QuickFind({ onOpen, onSettings, onNew, onGenerator, query, onQue
 
   const current = results[selected];
 
+  const canFill = (item: SearchHit) => canFillItem(item.type, tab, pageForms);
+
   function primary(item: SearchHit) {
-    if (item.type === CipherType.Login && tab?.url) void fillItem(ctx, item.id);
+    if (canFill(item)) void fillItem(ctx, item.id);
     else onOpen(item.id);
   }
 
@@ -107,6 +117,7 @@ export function QuickFind({ onOpen, onSettings, onNew, onGenerator, query, onQue
     }
   }
 
+  const formCount = results.filter((r) => r.formMatch).length;
   const siteCount = results.filter((r) => r.siteMatch).length;
   const sharedCount = results.filter((r) => r.sharedSite).length;
   const host = tab?.url ? safeHost(tab.url) : null;
@@ -156,14 +167,17 @@ export function QuickFind({ onOpen, onSettings, onNew, onGenerator, query, onQue
       )}
       <ul class="results" id="results" role="listbox" aria-label="Results" ref={listRef}>
         {results.map((item, index) => {
+          const suggested = formCount + siteCount + sharedCount;
           const header =
-            index === 0 && item.siteMatch
-              ? `Suggested for ${host ?? 'this site'}`
-              : index === siteCount && item.sharedSite
-                ? `Saved for sites that share ${host ?? 'this site'}’s sign-in`
-                : index === siteCount + sharedCount && siteCount + sharedCount > 0
-                  ? 'All items'
-                  : null;
+            index === 0 && item.formMatch
+              ? 'Suggested for this form'
+              : index === formCount && item.siteMatch
+                ? `Suggested for ${host ?? 'this site'}`
+                : index === formCount + siteCount && item.sharedSite
+                  ? `Saved for sites that share ${host ?? 'this site'}’s sign-in`
+                  : index === suggested && suggested > 0
+                    ? 'All items'
+                    : null;
           const itemHost = displayHost(item.uris);
           return (
             <Fragment key={item.id}>
@@ -197,7 +211,7 @@ export function QuickFind({ onOpen, onSettings, onNew, onGenerator, query, onQue
                   </span>
                   <span class="muted">{item.subtitle ?? itemHost ?? TYPE_LABEL[item.type]}</span>
                 </span>
-                {item.type === CipherType.Login && tab?.url && index === selected && (
+                {canFill(item) && index === selected && (
                   <button
                     type="button"
                     class="fill"

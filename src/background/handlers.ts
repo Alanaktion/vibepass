@@ -65,10 +65,13 @@ export function createHandlers(ctx: BackgroundContext): Handlers {
     'vault:logout': () => service.logout(),
     'vault:sync': () => service.sync(),
 
-    'vault:search': async ({ query, url }) => {
+    'vault:search': async ({ query, url, formTypes }) => {
       await service.status();
       if (!vault.isUnlocked) return [];
-      return search.search(query, url === undefined ? {} : { url });
+      return search.search(query, {
+        ...(url === undefined ? {} : { url }),
+        ...(formTypes === undefined ? {} : { formTypes }),
+      });
     },
     'vault:item': ({ id, ...auth }) => service.item(id, auth),
     'vault:reveal': ({ id, fieldId, ...auth }) => service.reveal(id, fieldId, auth),
@@ -77,6 +80,17 @@ export function createHandlers(ctx: BackgroundContext): Handlers {
       service.attachment(id, attachmentId, auth),
 
     'autofill:fill': (request) => need(ctx.autofill, 'Autofill').fill(request),
+    'autofill:inspect': async ({ tabId }) => {
+      const { fields } = await need(ctx.autofill, 'Autofill').inspect(tabId);
+      // A content script from before an update may not report card and address forms.
+      return {
+        username: fields.username,
+        password: fields.password,
+        totp: fields.totp,
+        card: Boolean(fields.card as unknown),
+        identity: Boolean(fields.identity as unknown),
+      };
+    },
     'autofill:page-ready': ({ loginForms }, sender) => {
       log.debug('page ready', { tabId: sender.tab?.id ?? -1, loginForms });
       return undefined;

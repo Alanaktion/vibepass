@@ -14,15 +14,10 @@ import { useEffect, useState } from 'preact/hooks';
 import { sendMessage } from '../../shared/messaging';
 import { displayHost, toWebUrl } from '../../vault/uri';
 import type { TotpCode } from '../../vault/totp';
-import {
-  CipherType,
-  type CipherDetail,
-  type DetailField,
-  type FolderSummary,
-} from '../../vault/types';
+import type { CipherDetail, DetailField, FolderSummary } from '../../vault/types';
 import { fillItem, pw } from '../actions';
 import { usePopup, type PopupContext } from '../context';
-import { copyText, downloadBase64, errorMessage, iconUrl, withReprompt } from '../lib';
+import { canFillItem, copyText, downloadBase64, errorMessage, iconUrl, withReprompt } from '../lib';
 import { ItemIcon } from './Dialogs';
 import { IconButton } from './IconButton';
 
@@ -80,7 +75,7 @@ export function ItemView({ id, onBack, onEdit }: Props) {
   }, [onBack, onEdit, id, writable]);
 
   const host = item ? displayHost(item.uris) : null;
-  const canFill = item?.type === CipherType.Login && Boolean(ctx.tab?.url);
+  const canFill = item ? canFillItem(item.type, ctx.tab, ctx.pageForms) : false;
 
   return (
     <main class="screen item">

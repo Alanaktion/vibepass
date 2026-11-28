@@ -27,7 +27,7 @@ status notes current when you finish a milestone.
 | 2. Write support | Save, update, edit, generate, organize   | Built behind a setting; Alan's lifecycle trial is the gate |
 | 3. Beta          | Quality, breadth, security for others    | Inline search, form types, first site rule and corpus      |
 | 4. v1            | Chrome Web Store and Firefox Add-ons     | Onboarding and unsigned review packages built              |
-| Later            | Passkeys, cards/identities, Safari, etc. | Basic passkeys; card and identity editing (no form fill)   |
+| Later            | Passkeys, cards/identities, Safari, etc. | Basic passkeys; card and identity editing and form fill    |
 
 Known gaps carried forward: a live check against self-hosted Bitwarden, Firefox live testing of
 autofill, editing, and passkeys, the notifications hub (sync polls instead), WebAuthn and Duo
@@ -72,7 +72,8 @@ src/
   popup/       Preact UI: setup, lock, quick find, item view, editor, generator, folders, trash,
                settings
   content/     Content script: field detection (detect.ts, with Bitwarden's heuristics in
-               fields.ts and site maps in autocomplete.ts), filling, inline menu (menu.ts), save
+               fields.ts and site maps in autocomplete.ts), card and address forms (forms.ts),
+               filling, inline menu (menu.ts), save
                banner (banner.ts); passkey prompt (passkey.ts, document start) and the
                page-world stand-in for navigator.credentials (webauthn-page.ts)
   data/        Published site data, refreshed by scripts/dev/update-site-data.mjs: Bitwarden's
@@ -89,7 +90,7 @@ scripts/
   build.mjs    One Vite build per entry point, then writes manifest.json per browser
   manifest.mjs Generates the Chrome and Firefox manifests
   dev/         Local Vaultwarden helpers: register, seed, live-check, inline-menu-check,
-               write-check, passkey-check
+               write-check, passkey-check, form-fill-check
 tests/         Vitest (happy-dom) tests and fixtures
 docs/          PLAN.md (phased plan) and adr/ (architecture decisions)
 ```
@@ -222,13 +223,15 @@ node scripts/dev/live-check.mjs http://127.0.0.1:8000 live@example.test
 node scripts/dev/inline-menu-check.mjs http://127.0.0.1:8000 live@example.test
 node scripts/dev/write-check.mjs http://127.0.0.1:8000 live@example.test
 node scripts/dev/passkey-check.mjs http://127.0.0.1:8000 live@example.test
+node scripts/dev/form-fill-check.mjs http://127.0.0.1:8000 live@example.test
 ```
 
 See the README for the full Docker command. Vaultwarden rate-limits logins (about 10 a minute),
 so wait between repeated runs (or start it with `-e LOGIN_RATELIMIT_MAX_BURST=1000`), and run
 with `NO_PROXY='*'` behind a proxy. Run the live checks for changes to login, sync, unlock,
 autofill, the inline menu, passkeys, or anything that writes (`write-check.mjs` and
-`passkey-check.mjs` write to the vault, so only against a throwaway server).
+`passkey-check.mjs` and `form-fill-check.mjs` write to the vault, so only against a throwaway
+server).
 
 ## Workflow
 

@@ -30,6 +30,26 @@ describe('quick find', () => {
     item('4', 'Wi-Fi', '', { type: CipherType.SecureNote, favorite: true }),
   ];
 
+  it('puts cards first for a payment form, with no query, and lists them by type', () => {
+    const index = createSearchIndex();
+    index.replaceAll([
+      ...items,
+      item('5', 'Work card', '', { type: CipherType.Card }),
+      item('6', 'Home card', '', { type: CipherType.Card, favorite: true }),
+      item('7', 'Me', '', { type: CipherType.Identity }),
+    ]);
+    const hits = index.search('', { url: 'https://github.com/', formTypes: [CipherType.Card] });
+    expect(hits.slice(0, 3).map((i) => [i.id, Boolean(i.formMatch), i.siteMatch])).toEqual([
+      ['6', true, false],
+      ['5', true, false],
+      ['1', false, true],
+    ]);
+    // Typing searches as usual.
+    expect(index.search('work', { formTypes: [CipherType.Card] })[0]?.formMatch).toBeUndefined();
+    expect(index.ofType(CipherType.Card).map((i) => i.id)).toEqual(['6', '5']);
+    expect(index.ofType(CipherType.Identity).map((i) => i.id)).toEqual(['7']);
+  });
+
   it('matches name, username, and website by prefix, case-insensitively', () => {
     const index = createSearchIndex();
     index.replaceAll(items);

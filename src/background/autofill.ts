@@ -1,10 +1,16 @@
 /**
  * Autofill v1, worker side. A fill only starts from a user gesture (popup Enter, the fill
- * shortcut, or a trusted click or Enter in the page's inline menu). The worker checks which page the tab is on, that the item is saved for it, and only
- * then sends the username and password to that tab's top frame, for that origin only.
+ * shortcut, or a trusted click or Enter in the page's inline menu). The worker checks which page
+ * the tab is on, that the item is saved for it, and only then sends the username and password to
+ * that tab's top frame, for that origin only.
+ *
+ * Cards and identities have no URLs, so they fill into any page's payment or address form, on
+ * the same gestures. A card only goes to a page with a secure connection unless the user
+ * confirms in the popup.
  */
 import { CodedError } from '../shared/errors';
 import type {
+  CardFill,
   ContentRequest,
   FillResult,
   InlineMenuItem,
@@ -20,6 +26,7 @@ import { isInsecureDowngrade, matchItem, MatchQuality, parseUri } from '../vault
 import { newDraft } from '../vault/encrypt';
 import { CipherType } from '../vault/types';
 import type { VaultState } from '../vault/state';
+import type { CipherSummary } from '../vault/types';
 import type { VaultService } from './service';
 
 export interface TabsApi {
@@ -104,10 +111,64 @@ export function createAutofill(deps: AutofillDeps) {
     return info as PageInfo;
   }
 
+  /** A page a card may go to without asking: https, or a local development server. */
+  function isSecurePage(url: URL): boolean {
+    if (url.protocol === 'https:') return true;
+    return (
+      url.protocol === 'http:' &&
+      (url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]')
+    );
+  }
+
+  /** Fill a card or identity into the page's payment or address form. */
+  async function fillForm(request: FillRequest, summary: CipherSummary): Promise<FillResult> {
+    const isCard = summary.type === CipherType.Card;
+    const info = await inspect(request.tabId);
+    const page = deps.search.pageFor(info.url);
+    if (!page) throw new Error('Vibepass only fills web pages');
+    if (request.confirmedOrigin !== undefined && request.confirmedOrigin !== page.url.origin) {
+      throw new Error('The page changed. Start the fill again.');
+    }
+    if (isCard && request.confirmedOrigin === undefined && !isSecurePage(page.url)) {
+      throw new CodedError(`${page.url.origin} isn’t using a secure connection`, 'fill-mismatch', {
+        origin: page.url.origin,
+      });
+    }
+    const { item } = await deps.service.fillData(request.id, {
+      masterPassword: request.masterPassword,
+      session: request.session,
+    });
+    const card: CardFill | null =
+      isCard && item.card
+        ? {
+            cardholderName: item.card.cardholderName,
+            brand: item.card.brand,
+            number: item.card.number,
+            expMonth: item.card.expMonth,
+            expYear: item.card.expYear,
+            code: item.card.code,
+          }
+        : null;
+    const result = (await deps.tabs.send(request.tabId, {
+      source: 'vibepass',
+      type: 'content:fill-form',
+      origin: page.url.origin,
+      card,
+      identity: isCard ? null : { ...item.identity },
+    })) as { filled?: unknown } | undefined;
+    const filled = Array.isArray(result?.filled) ? (result.filled as string[]) : [];
+    return { filled, copiedTotp: false };
+  }
+
   async function fill(request: FillRequest): Promise<FillResult> {
     const summary = deps.vault.summary(request.id);
     if (!summary) throw new CodedError('Vibepass is locked', 'locked');
-    if (summary.type !== CipherType.Login) throw new Error('Only logins can be filled for now');
+    if (summary.type === CipherType.Card || summary.type === CipherType.Identity) {
+      return fillForm(request, summary);
+    }
+    if (summary.type !== CipherType.Login) {
+      throw new Error('Only logins, cards, and identities can be filled');
+    }
 
     const info = await inspect(request.tabId);
     const page = deps.search.pageFor(info.url);
@@ -183,11 +244,27 @@ export function createAutofill(deps: AutofillDeps) {
       recent: isRecent,
     }));
     const settings = await deps.settings();
+    const row =
+      (type: 'card' | 'identity') =>
+      (hit: CipherSummary): InlineMenuItem => ({
+        id: hit.id,
+        name: hit.name,
+        username: hit.subtitle,
+        reprompt: hit.reprompt,
+        recent: false,
+        type,
+      });
     return {
       state: 'unlocked',
       items,
       canGenerate: true,
       offerToSave: settings.allowEdits && settings.offerToSave,
+      ...(settings.inlineMenuCards
+        ? {
+            cards: deps.search.ofType(CipherType.Card).map(row('card')),
+            identities: deps.search.ofType(CipherType.Identity).map(row('identity')),
+          }
+        : {}),
     };
   }
 
@@ -197,8 +274,21 @@ export function createAutofill(deps: AutofillDeps) {
    */
   async function fillFromMenu(tabId: number, id: string): Promise<FillResult> {
     if (!(await deps.settings()).inlineMenu) throw new Error('The inline menu is turned off');
-    if (deps.vault.summary(id)?.reprompt) {
-      throw new CodedError('Open Vibepass to fill this login', 'reprompt-required');
+    const summary = deps.vault.summary(id);
+    if (summary?.reprompt) {
+      const what =
+        summary.type === CipherType.Card
+          ? 'card'
+          : summary.type === CipherType.Identity
+            ? 'identity'
+            : 'login';
+      throw new CodedError(`Open Vibepass to fill this ${what}`, 'reprompt-required');
+    }
+    if (
+      (summary?.type === CipherType.Card || summary?.type === CipherType.Identity) &&
+      !(await deps.settings()).inlineMenuCards
+    ) {
+      throw new Error('Cards and identities are turned off in the inline menu');
     }
     return fill({ tabId, id });
   }

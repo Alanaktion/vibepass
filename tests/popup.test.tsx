@@ -141,6 +141,36 @@ describe('popup', () => {
     });
   });
 
+  it('suggests cards for a payment form, and fills one on Enter', async () => {
+    const card: SearchHit = {
+      ...hit('c', 'Travel card', false),
+      type: CipherType.Card,
+      subtitle: 'Visa •••• 1111',
+      uris: [],
+      siteMatch: false,
+      formMatch: true,
+    };
+    const calls = backend(base, {
+      'autofill:inspect': () => ({
+        ok: true,
+        data: { username: false, password: false, totp: false, card: true, identity: false },
+      }),
+      'vault:search': (payload) => ({
+        ok: true,
+        data: (payload as { formTypes?: number[] }).formTypes?.includes(CipherType.Card)
+          ? [card, hit('b', 'Other', false)]
+          : [hit('b', 'Other', false)],
+      }),
+    });
+    render(<App />);
+    expect(await screen.findByText('Suggested for this form')).toBeTruthy();
+    expect(screen.getByText('All items')).toBeTruthy();
+    fireEvent.keyDown(screen.getByLabelText('Search vault'), { key: 'Enter' });
+    await waitFor(() => {
+      expect(calls.find((c) => c.type === 'autofill:fill')?.payload).toMatchObject({ id: 'c' });
+    });
+  });
+
   it('moves the selection with the arrow keys and copies the password with a chord', async () => {
     const calls = backend(base);
     render(<App />);

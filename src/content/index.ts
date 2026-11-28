@@ -26,6 +26,15 @@ import {
   restoreBrowserAutocomplete,
   suppressBrowserAutocomplete,
 } from './detect';
+import type { FormField } from './autocomplete';
+import {
+  fieldRole,
+  fillCard,
+  fillIdentity,
+  isCardFormField,
+  isIdentityForm,
+  pageForms,
+} from './forms';
 import { InlineMenu, type MenuRow } from './menu';
 
 export function countLoginForms(root: ParentNode = document): number {
@@ -34,14 +43,44 @@ export function countLoginForms(root: ParentNode = document): number {
 
 export function inspectPage(): PageInfo {
   const fields = detectLoginFields();
+  const forms = pageForms();
   return {
     url: location.href,
     fields: {
       username: fields.username !== null,
       password: fields.password !== null,
       totp: fields.totp !== null,
+      card: forms.card,
+      identity: forms.identity,
     },
   };
+}
+
+/**
+ * Fill a card or identity. It goes into the form the user is in: the field the inline menu is
+ * on, else the field that had focus before the popup opened, else the page's card or address
+ * form.
+ */
+export function fillFormPage(request: Extract<ContentRequest, { type: 'content:fill-form' }>): {
+  filled: string[];
+} {
+  if (location.origin !== request.origin) throw new Error('The page changed before filling');
+  const anchor = menu.anchor ?? (lastField?.isConnected ? lastField : null);
+  let filled: string[] = [];
+  filling = true;
+  try {
+    if (request.card) filled = fillCard(request.card, anchor);
+    else if (request.identity) filled = fillIdentity(request.identity, anchor);
+  } finally {
+    filling = false;
+  }
+  menu.close();
+  if (filled.length === 0) {
+    throw new Error(
+      request.card ? 'No card fields found on this page' : 'No address fields found on this page',
+    );
+  }
+  return { filled };
 }
 
 export function fillPage(request: Extract<ContentRequest, { type: 'content:fill' }>): {
@@ -85,6 +124,8 @@ let cachedState: InlineMenuState | null = null;
 const suppressed = new Set<HTMLInputElement>();
 
 let filterField: HTMLInputElement | null = null;
+/** The last form field the user focused, so a fill from the popup knows which form they're in. */
+let lastField: FormField | null = null;
 
 const menu = new InlineMenu({ onPick: (row) => void pick(row) });
 
@@ -99,10 +140,49 @@ function loginFieldKind(input: HTMLInputElement): FieldKind | null {
   return null;
 }
 
+/** A password box in the field's form (or page, with no form): a login or sign-up form. */
+function hasPasswordNear(input: HTMLInputElement): boolean {
+  const scope: ParentNode = input.form ?? input.ownerDocument;
+  return Array.from(scope.querySelectorAll('input')).some(
+    (other) => other !== input && isPasswordInput(other),
+  );
+}
+
+/**
+ * Is this a field of a payment card form or an address form? Card fields win over login guesses
+ * (a "Security code" box is the card's, not a one-time password); login forms win over
+ * identities (the email of a sign-in form is the account name).
+ */
+export function formFieldKind(input: HTMLInputElement): 'card' | 'identity' | null {
+  const role = fieldRole(input);
+  if (!role) return null;
+  if (role.form === 'card') return isCardFormField(input) ? 'card' : null;
+  if ((role.key === 'email' || role.key === 'username') && hasPasswordNear(input)) return null;
+  return isIdentityForm(input) ? 'identity' : null;
+}
+
+function formRows(
+  state: Exclude<InlineMenuState, { state: 'off' }>,
+  input: HTMLInputElement,
+  kind: 'card' | 'identity',
+): MenuRow[] {
+  if (state.state === 'locked') {
+    // Only on forms that are clearly for payment or an address, so a lone box doesn't nag.
+    return kind === 'card' || isIdentityForm(input, 3) ? [{ kind: 'unlock', what: kind }] : [];
+  }
+  const items = (kind === 'card' ? state.cards : state.identities) ?? [];
+  return items.map((item) => ({ kind: 'item', item }));
+}
+
 /** The rows to show for a field, or none. */
 export function menuRows(state: InlineMenuState | null, input: HTMLInputElement): MenuRow[] {
   if (!state || state.state === 'off') return [];
+  const formKind = formFieldKind(input);
+  if (formKind === 'card') return formRows(state, input, formKind);
   const kind = loginFieldKind(input);
+  if (formKind === 'identity' && (kind === null || kind === 'username')) {
+    return formRows(state, input, formKind);
+  }
   if (!kind) return [];
   if (kind === 'new-password') {
     // Sign up or change password: offer a new password, never an existing login.
@@ -201,8 +281,8 @@ async function pick(row: MenuRow): Promise<void> {
     await sendMessage('autofill:menu-fill', { id: row.item.id });
     menu.close();
   } catch (error) {
-    const text = isCodedError(error, 'reprompt-required')
-      ? 'Open Vibepass to fill this login'
+    const text = isCodedError(error, 'fill-mismatch')
+      ? `${error.message}. Fill from the Vibepass button to continue.`
       : error instanceof Error
         ? error.message
         : 'Could not fill';
@@ -223,6 +303,13 @@ function inputFromEvent(event: Event): HTMLInputElement | null {
 
 function onFocusIn(event: FocusEvent): void {
   if (filling) return;
+  const target = event.composedPath()[0];
+  if (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLSelectElement ||
+    target instanceof HTMLTextAreaElement
+  )
+    lastField = target;
   const input = inputFromEvent(event);
   if (input && input !== menu.anchor) openFor(input);
 }
@@ -304,7 +391,13 @@ export function startInlineMenu(): void {
   document.addEventListener('keydown', onKeyDown, true);
   // Answer the first focus without waiting on the worker (and it may already be focused).
   const fields = detectLoginFields();
-  if (fields.username || fields.password || fields.totp) {
+  const active = deepActiveElement();
+  if (
+    fields.username ||
+    fields.password ||
+    fields.totp ||
+    (active instanceof HTMLInputElement && fieldRole(active))
+  ) {
     void refreshState().then(() => {
       const active = deepActiveElement();
       if (active instanceof HTMLInputElement && !menu.isOpen) show(active, cachedState);
@@ -409,7 +502,11 @@ export function startSaveBanner(): void {
 function handle(message: unknown): Promise<unknown> | undefined {
   if (!isContentRequest(message)) return undefined;
   return Promise.resolve().then(() =>
-    message.type === 'content:inspect' ? inspectPage() : fillPage(message),
+    message.type === 'content:inspect'
+      ? inspectPage()
+      : message.type === 'content:fill-form'
+        ? fillFormPage(message)
+        : fillPage(message),
   );
 }
 

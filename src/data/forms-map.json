@@ -38,7 +38,8 @@
               "fields": {
                 "email": [
                   "app-signup form[method='post'] input#inputEmail[name='inputUserName'][type='email']"
-                ]
+                ],
+                "phone": ["app-signup form[method='post'] input#tel[name='inputPhone']"]
               }
             }
           ]
@@ -66,7 +67,8 @@
                 "email": ["form#signup-form input[name='email'][type='email']"],
                 "newPassword": [
                   "form#signup-form input[name='password'][type='password'][autocomplete='new-password']"
-                ]
+                ],
+                "phone": ["form#signup-form input[type='tel'][autocomplete='tel']"]
               }
             }
           ]
@@ -82,6 +84,10 @@
               "fields": {
                 "email": [
                   "gi-login.hydrated >>> gi-sign-in-combo.hydrated >>> gi-form.hydrated form.form input#sign-in-phoneEmail-input[type='email'][autocomplete='email'][name='phoneEmail']"
+                ],
+                "phone": [
+                  "gi-login.hydrated >>> gi-sign-in-combo.hydrated >>> gi-form.hydrated form.form input#sign-in-phoneEmail-input[type='email'][autocomplete='email'][name='phoneEmail']",
+                  "gi-login.hydrated >>> gi-sign-in-combo.hydrated >>> gi-form.hydrated form.form input#sign-in-phoneEmail-input[type='tel'][autocomplete='tel-national'][name='phoneEmail']"
                 ],
                 "password": [
                   "gi-login.hydrated >>> gi-sign-in-password.hydrated >>> gi-form.hydrated form.sign-in-password:not(:has(div.hide-input-group)) input#sign-in-password-password-input[type='password'][autocomplete='new-password'][name='password']"
@@ -160,6 +166,33 @@
                 "newPassword": [
                   "form#account-setup input#password[name='password'][type='password']",
                   "form#account-setup input#verify_password[name='verify_password'][type='password']"
+                ]
+              }
+            },
+            {
+              "category": "address",
+              "fields": {
+                "firstName": [
+                  "form#account-setup input#billing_first_name[name='billing_first_name']"
+                ],
+                "lastName": [
+                  "form#account-setup input#billing_last_name[name='billing_last_name']"
+                ],
+                "organization": [
+                  "form#account-setup input#billing_organization[name='billing_organization']"
+                ],
+                "country": ["form#account-setup select#billing_nation[name='billing_nation']"],
+                "addressLine1": ["form#account-setup input#billing_street[name='billing_street']"],
+                "addressLine2": [
+                  "form#account-setup input#billing_auxiliary[name='billing_auxiliary']"
+                ],
+                "postalCode": ["form#account-setup input#billing_zip[name='billing_zip']"],
+                "addressLevel2": ["form#account-setup input#billing_city[name='billing_city']"],
+                "addressLevel1": [
+                  "form#account-setup select#billing_state-usa[name='billing_state']",
+                  "form#account-setup select#billing_state-canada",
+                  "form#account-setup select#billing_state-all",
+                  "form#account-setup input#billing_state-intl"
                 ]
               }
             }
@@ -312,6 +345,9 @@
               "category": "account-login",
               "fields": {
                 "email": [
+                  "input#identifierId[name='identifier'][type='text'][autocomplete='username webauthn']"
+                ],
+                "phone": [
                   "input#identifierId[name='identifier'][type='text'][autocomplete='username webauthn']"
                 ],
                 "username": [
@@ -479,8 +515,20 @@
         {
           "category": "account-creation",
           "fields": {
+            "firstName": [
+              "form[method='POST'][action='/default-form-action'] input[name='person.firstName'][type='text']"
+            ],
+            "middleName": [
+              "form[method='POST'][action='/default-form-action'] input[name='person.middleName'][type='text']"
+            ],
+            "lastName": [
+              "form[method='POST'][action='/default-form-action'] input[name='person.lastName'][type='text']"
+            ],
             "email": [
               "form[method='POST'][action='/default-form-action'] input[name='person.emailPrimary'][type='email']"
+            ],
+            "phone": [
+              "form[method='POST'][action='/default-form-action'] input[name='person.phoneMobile'][type='text']"
             ]
           }
         }
@@ -550,6 +598,8 @@
             {
               "category": "account-creation",
               "fields": {
+                "firstName": ["input[name='firstname']"],
+                "lastName": ["input[name='lastname']"],
                 "username": ["form#create-form input[name='email']"],
                 "newPassword": ["input#create-password", "input#create-password-confirmation"]
               }
@@ -612,7 +662,14 @@
           "fields": {
             "email": ["div#loginContainer form input[autocomplete='webauthn'][name='username']"],
             "password": ["div#loginContainer form input[autocomplete='new-password']"],
+            "phone": ["div#loginContainer form input[autocomplete='username'][name='mobile']"],
             "username": ["div#loginContainer form input[autocomplete='webauthn'][name='username']"]
+          }
+        },
+        {
+          "category": "account-creation",
+          "fields": {
+            "phone": ["div#loginContainer form input[name='mobile']"]
           }
         },
         {
@@ -785,7 +842,16 @@
               "category": "account-creation",
               "fields": {
                 "email": ["input#email"],
-                "newPassword": ["input#password"]
+                "newPassword": ["input#password"],
+                "fullName": ["input#full-name"],
+                "organization": ["input#company-name"],
+                "phone": ["input#phone-number"],
+                "addressLine1": ["input#address"],
+                "addressLine2": ["input#address-ext"],
+                "addressLevel2": ["input#city"],
+                "addressLevel1": ["input#state"],
+                "country": ["input#country"],
+                "postalCode": ["input#postcode"]
               }
             }
           ]
